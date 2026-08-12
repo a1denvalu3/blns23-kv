@@ -15,8 +15,9 @@ why verification needs no ZK machinery) lives in
 
 The scheme is a lattice analogue of the hashed-Diffie-Hellman OPRF: a
 signature on `msg` is `(rho, v)` with `v = round(s^T * H(msg, rho))`, which
-only the holder of the secret `s` can verify — the same trust model as
-Chaumian ecash (e.g. Cashu's BDHKE), where the mint is the only verifier.
+only the holder of the secret `s` can verify — the trust model of keyed-
+verification anonymous tokens (e.g. Chaumian ecash, Privacy Pass), where the
+issuing server is also the only verifier.
 Signatures are **48 bytes** at the paper's parameters.
 
 **Status: research prototype.** Functional end-to-end with a mock NIZK at toy
@@ -27,19 +28,19 @@ parameters. See "Security" below before touching anything real.
 Two rounds (round-optimal), over `R_Q = Z_Q[X]/(X^D+1)`, vectors of length K:
 
 ```
-user                                        mint (s, e1; pk = (B, t = sᵀB + e1ᵀ))
-----                                        ---
+user                                    server (s, e1; pk = (B, t = sᵀB + e1ᵀ))
+----                                    ------
 r, e2 ← ternary
 rho = H_rho(r, e2)
 u   = H(msg, rho)
 c   = B·r + e2 + u
 pi1 = NIZK{ c well-formed }
-                  c, pi1  ──►
-                                            e3 = PRF_K(c)   (deterministic per c!)
-                                            h  = sᵀ·c + e3
-                                            pi2 = NIZK{ h, t consistent w/ s }
-                            h, pi2  ◄──
-v = round(h − tᵀ·r)                          = round(sᵀu + tiny noise)
+                c, pi1  ──►
+                                          e3 = PRF_K(c)   (deterministic per c!)
+                                          h  = sᵀ·c + e3
+                                          pi2 = NIZK{ h, t consistent w/ s }
+                          h, pi2  ◄──
+v = round(h − tᵀ·r)                        = round(sᵀu + tiny noise)
 signature = (rho, v)
 ```
 
