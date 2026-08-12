@@ -112,3 +112,9 @@ strategy. Short version:
 - [ ] M3: round-1 relation with hash-in-ZK
 - [ ] M4: paper-scale parameters, benchmarks, hardening
 - [ ] M5: Cashu-style ecash integration sketch
+
+## License
+
+MIT (see [LICENSE](LICENSE)). Vendored components under `third_party/`
+retain their own licenses (MIT / Apache-2.0 / public domain — see
+[third_party/VENDOR.md](third_party/VENDOR.md)).
