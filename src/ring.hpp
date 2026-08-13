@@ -27,7 +27,9 @@ public:
   static constexpr size_t NMOD = P::NMOD;
 
   using NPoly = nfl::poly<uint64_t, D, NMOD>; // RNS polynomial
-  struct Poly {
+  // NFLlib poly requires 32-byte alignment (SIMD). The wrapper propagates it
+  // so that stack/vector storage of Poly stays aligned.
+  struct alignas(32) Poly {
     NPoly v{};
   };
   using Vec = std::array<Poly, K>;

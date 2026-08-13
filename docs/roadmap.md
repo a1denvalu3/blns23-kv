@@ -17,6 +17,8 @@ bottom whose items gate milestone acceptance.
 - [x] Signature wire format (`serialize_sig`/`deserialize_sig`), 64 B at toy
       params
 - [x] `blnskv-demo` end-to-end roundtrip with sizes/timings
+- [x] `blnskv-bench` benchmark harness (per-stage protocol timings +
+      primitive ops, toy and paper-shape parameters) — see "Benchmarks"
 - [x] Testing: cross-validated NTT vs. schoolbook reference, property tests
       (rounding stability, signer determinism), negative tests (wrong
       key/msg/rho, truncated/corrupted wire formats) — see T1–T4
@@ -39,7 +41,10 @@ Tasks:
 - [ ] Parameter mapping: LaBRADOR works over its own proof modulus; confirm
       the relation modulus vs. our Q (likely prove mod each RNS prime, or
       pick Q to match a LaBRADOR-friendly modulus — co-design with M2)
-- [ ] Benchmarks on an AVX-512 machine (none locally — needs remote host)
+- [ ] Benchmarks on an AVX-512 machine (none locally — needs remote host);
+      record pi2 prove/verify time and proof size in docs/benchmarks.md —
+      this is the first public performance data for this scheme, so numbers
+      are a deliverable in their own right
 - [ ] Testing: soundness suite for pi2 — false statements (wrong h, wrong t,
       non-ternary witness) must fail verification; mutated proof transcripts
       rejected; mock vs. LaBRADOR cross-checks on identical instances (T4)
@@ -72,7 +77,9 @@ rho)` inside the NIZK. SHAKE256 is what makes the paper's issuance slow.
 
 - [ ] Express pi1 (hashes + linear relation + ternary bounds) in the
       LaBRADOR constraint language
-- [ ] Benchmark end-to-end issuance latency; iterate on parameters
+- [ ] Benchmark end-to-end issuance latency (the paper's open question:
+      ~30 min with SHA-in-ZK, target <5 s with a ZK-friendly hash — document
+      the measured ratio); iterate on parameters
 - [ ] Testing: soundness suite for pi1 (wrong c, wrong rho, non-ternary r/e2
       all rejected); attack regression test demonstrating the unit-vector
       key-recovery attack when pi1 is bypassed (T5)
@@ -99,6 +106,21 @@ rho)` inside the NIZK. SHAKE256 is what makes the paper's issuance slow.
 - [ ] Testing: integration tests against a stub mint server (double-spend
       rejection, concurrent issuance, malformed API inputs)
 - Acceptance: interoperable demo against a stub mint server.
+
+## Benchmarks
+
+BLNS23 has essentially no public implementations (the authors never released
+code), so timing data is a project deliverable in itself. Harness:
+`blnskv-bench [--iters N]`, results collected in `docs/benchmarks.md`.
+
+- [x] Harness: per-stage protocol timings (keygen/commit/respond/finalize/
+      verify) + primitive ops (mul/matvec/inner/round/serialize), toy and
+      paper-shape parameters
+- [x] First numbers recorded (mock NIZK, see docs/benchmarks.md)
+- [ ] M1: pi2 LaBRADOR prove/verify time + proof size (AVX-512 host)
+- [ ] M3: end-to-end issuance with real proofs — headline metric
+- [ ] M4: reproducible benchmark table in docs (CPU, flags, params, code
+      hash), CI benchmark regression check
 
 ## Open problems (research-level)
 
