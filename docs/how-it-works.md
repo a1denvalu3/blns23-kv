@@ -125,8 +125,10 @@ knowledge of preimages spanning ~2^12 ≈ 4096 SHA evaluations — estimated at
 The paper's suggested fixes, which this repository is structured around:
 
 1. **Swap in a ZK-friendly hash** (Poseidon2-style) for `H_rho`/`H_to_ring` —
-   collapses the hash-in-ZK circuit by ~100x. In this repo the swap is
-   confined to `src/hashring.hpp`.
+   collapses the hash-in-ZK circuit by ~100x. **Done** in this repo: Poseidon2
+   over the Goldilocks field (`src/poseidon2.hpp`), confined to
+   `src/hashring.hpp`. What remains is co-designing the hash field with the
+   proof system's arithmetic and the RNS primes of Q (roadmap M2).
 2. **Prove with lattice-native proof systems** (LaBRADOR & successors)
    instead of proving SHA — the round-2 relation (`h = sᵀc + e3`,
    `t = sᵀB + e1ᵀ`) is already a pure lattice relation; the round-1 relation
@@ -139,6 +141,6 @@ The paper's suggested fixes, which this repository is structured around:
 |---|---|
 | `R_q` arithmetic (NTT/RNS), CRT reconstruction, `round(·)` | `src/ring.hpp` |
 | Ternary/uniform sampling | `src/sampling.hpp` |
-| `H_rho`, `H_to_ring` (placeholder hashes) | `src/hashring.hpp` |
+| `H_rho`, `H_to_ring` (Poseidon2 over Goldilocks) | `src/hashring.hpp` |
 | NIZK interface + mock prover | `src/nizk.hpp` |
 | Protocol: keygen / commit / respond / finalize / verify | `src/blnskv.hpp` |

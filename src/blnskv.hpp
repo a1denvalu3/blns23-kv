@@ -15,8 +15,9 @@
 //   mint:   verify(msg, (rho,v)): v == round(s^T*H(msg,rho))
 //
 // SECURITY WARNING: research prototype. Toy parameters are NOT secure, the
-// mock NIZK is NOT zero-knowledge/sound, and hash_to_ring() is a placeholder
-// pending the ZK-friendly hash redesign. Do not use for anything real.
+// mock NIZK is NOT zero-knowledge/sound, and the Poseidon2 hash-to-ring is
+// not yet co-designed with the (future) proof system's arithmetic. Do not
+// use for anything real.
 
 #include "hashring.hpp"
 #include "nizk.hpp"

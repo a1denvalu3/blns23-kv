@@ -61,7 +61,7 @@ src/
                  exact rounding via boost::multiprecision (header-only)
   sampling.hpp   uniform / ternary samplers
   drbg.hpp       SHAKE256 counter-DRBG (also backs nfl::fastrandombytes)
-  hashring.hpp   H_rho / H_to_ring  **PLACEHOLDER, see below**
+  hashring.hpp   H_rho / H_to_ring (Poseidon2 over Goldilocks, see below)
   nizk.hpp       NIZK interface + MockNizk (INSECURE, witness-embedding)
   blnskv.hpp     the protocol (keygen / commit / respond / finalize / verify)
 tests/           ring + end-to-end protocol tests
@@ -93,10 +93,12 @@ cmake -B build -DBLNSKV_WITH_LABRADOR=ON
 - **MockNizk is not a proof system.** It embeds the witness in cleartext.
   Zero privacy, zero succinctness. It only exists so the protocol flow and
   the witness-generating arithmetic can be tested.
-- **H_to_ring is a placeholder.** The round-1 proof must prove hash
-  preimages in ZK; doing that with SHAKE256 is exactly what made the paper's
-  issuance slow. Replacing it with a ZK-friendly hash (Poseidon2-style) and
-  re-doing the parameter analysis is the core open work item.
+- **H_to_ring is Poseidon2, not yet co-designed with the proof system.**
+  `H_rho`/`H_to_ring` now use Poseidon2 over the Goldilocks field
+  (`src/poseidon2.hpp`), which is ~100x cheaper to prove in ZK than the
+  SHAKE256 placeholder it replaced. Still open: embedding the hash field
+  into the proof system's arithmetic and re-doing the parameter analysis
+  (roadmap M2).
 - No side-channel hardening, no constant-time guarantees, no audits.
 
 ## Roadmap
@@ -108,7 +110,8 @@ strategy. Short version:
 
 - [x] M0: ring arithmetic (NFLlib NTT/RNS), full protocol flow with mock
       NIZK, signature wire format, demo binary, tests
-- [ ] M1: LaBRADOR-backed `Nizk` adapter for the round-2 relation
+- [ ] M1: LaBRADOR-backed `Nizk` adapter for the round-2 relation (primer:
+      [docs/labrador-primer.md](docs/labrador-primer.md))
 - [ ] M2: ZK-friendly hash-to-ring + parameter co-design
 - [ ] M3: round-1 relation with hash-in-ZK
 - [ ] M4: paper-scale parameters, benchmarks, hardening

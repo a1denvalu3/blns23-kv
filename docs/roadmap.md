@@ -25,6 +25,9 @@ bottom whose items gate milestone acceptance.
 
 ## M1 — Real round-2 proof (pi2) via LaBRADOR
 
+Conceptual background on the vendored proof system and how pi2 maps onto
+its constraint language: [docs/labrador-primer.md](labrador-primer.md).
+
 The signer-side relation is a pure lattice relation and maps directly onto
 LaBRADOR:
 
@@ -58,7 +61,11 @@ rho)` inside the NIZK. SHAKE256 is what makes the paper's issuance slow.
 
 - [ ] Choose the hash family. Options and tensions:
   - Poseidon2/Monolith over a prime field — field/prime must embed into the
-    proof system's arithmetic (mismatch with 62-bit NTT primes needs care)
+    proof system's arithmetic (mismatch with 62-bit NTT primes needs care).
+    **Working implementation landed:** Poseidon2 over Goldilocks
+    (`src/poseidon2.hpp`, Plonky3-KAT-tested), now backing
+    `hash_rho`/`hash_to_vec`. Remaining for this item: confirm it against the
+    proof-system co-design below, or replace it if that analysis says so.
   - RainHash-style binary-field hashes (cheap in VOLEitH; unclear in
     LaBRADOR)
   - Lattice-native (Ajtai/SIS-style) "hash" — cheapest to prove, but it is
@@ -66,7 +73,9 @@ rho)` inside the NIZK. SHAKE256 is what makes the paper's issuance slow.
 - [ ] Parameter search tooling: script (sage + lattice-estimator) computing
   dimension/Q/noise-margin/rounding-failure probability jointly with the
   hash choice
-- [ ] Implement chosen hash behind the existing `hashring.hpp` interface
+- [x] Implement chosen hash behind the existing `hashring.hpp` interface
+      (Poseidon2/Goldilocks; byte encoding and sponge in `src/poseidon2.hpp`,
+      swap confined to `src/hashring.hpp`)
 - [ ] Testing: golden KAT vectors for the hash (T2); differential test
   against a reference implementation of the chosen hash (T1); documented
   rounding-failure probability < 2^-80 with a statistical test harness (T3)
