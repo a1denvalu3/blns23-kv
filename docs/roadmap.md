@@ -40,7 +40,12 @@ LaBRADOR:
 Tasks:
 - [ ] Read labrador's `constraints.h`/`proofsystem.h` API; write
       `src/nizk_labrador.cpp` implementing `Nizk<P>::prove_response` /
-      `verify_response`
+      `verify_response`. Dev/test loop works locally without AVX-512: the
+      library compiles with pinned Ice Lake-class flags (any x86-64
+      toolchain) and its self-tests run under Intel SDE
+      (`tools/sde-external-*`, registered as `labrador-jlproj` /
+      `labrador-smoke` ctest entries; the full 72-instance sweep binary
+      `labrador-test-round` is built for manual runs on real hardware).
 - [ ] Parameter mapping: LaBRADOR works over its own proof modulus; confirm
       the relation modulus vs. our Q (likely prove mod each RNS prime, or
       pick Q to match a LaBRADOR-friendly modulus — co-design with M2)

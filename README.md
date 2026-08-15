@@ -80,11 +80,26 @@ ctest --test-dir build --output-on-failure
 Requirements: C++20 compiler, CMake ≥ 3.22, Boost headers
 (`boost/multiprecision`), Linux (getrandom). No GMP/MPFR needed.
 
-LaBRADOR NIZK backend (AVX-512 machines only):
+LaBRADOR NIZK backend:
 
 ```bash
-cmake -B build -DBLNSKV_WITH_LABRADOR=ON
+cmake -B build-lab -DBLNSKV_WITH_LABRADOR=ON && cmake --build build-lab -j
 ```
+
+This **compiles** on any x86-64 toolchain (we pin an explicit Ice Lake-class
+flag set instead of upstream's `-march=native`). **Running** the LaBRADOR
+code needs AVX-512 hardware — or an emulator: unpack Intel SDE into
+`tools/` and the vendored self-tests are registered with ctest through it:
+
+```bash
+curl -L -o tools/sde.tar.xz https://downloadmirror.intel.com/915934/sde-external-10.8.0-2026-03-15-lin.tar.xz
+tar -xJf tools/sde.tar.xz -C tools
+cmake -B build-lab -DBLNSKV_WITH_LABRADOR=ON   # re-run configure to pick up SDE
+ctest --test-dir build-lab -R labrador --output-on-failure
+```
+
+Emulation is for functional testing only — timings under SDE are
+meaningless, so benchmarking still needs an AVX-512 host (roadmap M1).
 
 ## Security — read this
 

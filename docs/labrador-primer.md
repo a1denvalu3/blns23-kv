@@ -217,9 +217,13 @@ adapter should be built.
 ## 4. Practical notes
 
 - **AVX-512 only.** The submodule does not compile or run without AVX-512
-  (`immintrin.h` / `__m512i` throughout `data.h`, `jlproj.c`, the NTT), and
-  the README says so explicitly. There is no AVX-512 machine locally; M1
-  benchmarking needs a remote host (roadmap M1).
+  codegen (`immintrin.h` / `__m512i` throughout `data.h`, `jlproj.c`, the
+  NTT). We compile with pinned Ice Lake-class flags, which works on any
+  x86-64 toolchain; *running* needs AVX-512 hardware or Intel SDE (the
+  `labrador-jlproj`/`labrador-round` ctest entries run under SDE when it is
+  unpacked in `tools/`). Emulation is fine for the functional dev loop but
+  timings under it are meaningless — M1 benchmarking still needs a remote
+  AVX-512 host (roadmap M1).
 - **Research-grade.** The submodule README warns the code has not undergone
   security review, testing, or validation for production. Same posture as
   the rest of this repo: fine for measuring pi2, not for shipping.
