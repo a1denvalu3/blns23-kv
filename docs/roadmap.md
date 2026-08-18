@@ -38,26 +38,41 @@ LaBRADOR:
                       ||s||, ||e1||, ||e3|| small (ternary norm bounds)
 
 Tasks:
-- [ ] Read labrador's `constraints.h`/`proofsystem.h` API; write
+- [x] Read labrador's `constraints.h`/`proofsystem.h` API; write
       `src/nizk_labrador.cpp` implementing `Nizk<P>::prove_response` /
-      `verify_response`. Dev/test loop works locally without AVX-512: the
-      library compiles with pinned Ice Lake-class flags (any x86-64
-      toolchain) and its self-tests run under Intel SDE
+      `verify_response`. DONE at ToyParams (`LabradorNizk<P>`,
+      `src/nizk_labrador.{hpp,cpp}`): pi2 proven for real via quotient-
+      polynomial lifting over the integers (witness s | e1 | e3 | k_t | k_h,
+      K+1 rank-1 sparsecnsts mod PS_Q), pi1 still delegated to the mock.
+      First numbers (ToyParams, 1 composite round, Intel SDE emulation):
+      proof 545,804 B, prove+verify ~1.9 s wall in the `nizk-labrador`
+      ctest entry — emulated timing is indicative only, real benchmarks
+      still need an AVX-512 host. Dev/test loop works locally without
+      AVX-512: the library compiles with pinned Ice Lake-class flags (any
+      x86-64 toolchain) and its self-tests run under Intel SDE
       (`tools/sde-external-*`, registered as `labrador-jlproj` /
       `labrador-smoke` ctest entries; the full 72-instance sweep binary
       `labrador-test-round` is built for manual runs on real hardware).
-- [ ] Parameter mapping: LaBRADOR works over its own proof modulus; confirm
-      the relation modulus vs. our Q (likely prove mod each RNS prime, or
-      pick Q to match a LaBRADOR-friendly modulus — co-design with M2)
+- [ ] Parameter mapping / encoding soundness: the adapter lifts the mod-p0
+      relation over the integers via quotient polynomials with L2APPROX norm
+      bounds (without the bounds the mod-PS_Q encoding is vacuous). Whether
+      that guarantee suffices for OMUF is OPEN — alternatives: prove mod
+      each RNS prime, or pick Q to match a LaBRADOR-friendly modulus
+      (co-design with M2)
 - [ ] Benchmarks on an AVX-512 machine (none locally — needs remote host);
       record pi2 prove/verify time and proof size in docs/benchmarks.md —
       this is the first public performance data for this scheme, so numbers
       are a deliverable in their own right
-- [ ] Testing: soundness suite for pi2 — false statements (wrong h, wrong t,
-      non-ternary witness) must fail verification; mutated proof transcripts
-      rejected; mock vs. LaBRADOR cross-checks on identical instances (T4)
+- [x] Testing: soundness suite for pi2 — false statements (wrong h) and
+      mutated proof transcripts rejected by `verify_response`; mock vs.
+      LaBRADOR cross-checks on identical instances (T4). Covered by
+      `tests/test_nizk_labrador.cpp` (wrong-t and non-ternary-witness cases
+      still worth adding)
 - Acceptance: pi2 proves/verifies on AVX-512; proof size measured; mock
   replaced in `respond`/`finalize` behind the same `Nizk<P>` interface.
+  STATUS (partial): mock replaced behind the interface and proof size
+  measured under emulation; the on-hardware prove/verify run is the
+  remaining AVX-512-host item.
 
 ## M2 — ZK-friendly hash + parameter co-design (the core research task)
 

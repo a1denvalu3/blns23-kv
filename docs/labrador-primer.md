@@ -214,6 +214,21 @@ degree 256 or by restructuring the relation coefficient-wise. Toy params
 (`D = 256`) line up with LaBRADOR's `N` exactly, which is where the first
 adapter should be built.
 
+**Implementation status.** The adapter exists: `src/nizk_labrador.{hpp,cpp}`
+(`LabradorNizk<P>`, ToyParams only) builds exactly the `r = 5` witness and
+the `K + 1` rank-1 `sparsecnst`s described above, computes the quotient
+polynomials by exact integer convolution, drives the composite
+prove/reduce loop, and serializes the transcript. It uses the
+quotient-lifting option with `L2APPROX` bounds on the quotient blocks;
+the soundness question above remains open and is tracked in the roadmap.
+Interop notes for anyone touching that file: the vendored headers are C99
+(`double complex` prototypes, VLA parameters) and are neutralized via a
+macro + an empty `src/labrador_cxx_shim/complex.h`; `data.h` leaks short
+macros (`N`, `K`, `L`, `T`, `SLACK`) that must be `#undef`ed after the
+includes; `polz` wire values range over `[0, 2^LOGQ)` (a lift constant
+coefficient can be exactly `PS_Q`); the two vendored fips202 copies
+resolve to one copy at link time without intervention.
+
 ## 4. Practical notes
 
 - **AVX-512 only.** The submodule does not compile or run without AVX-512
@@ -227,12 +242,10 @@ adapter should be built.
 - **Research-grade.** The submodule README warns the code has not undergone
   security review, testing, or validation for production. Same posture as
   the rest of this repo: fine for measuring pi2, not for shipping.
-- **What M1 concretely builds** (`docs/roadmap.md`): `src/nizk_labrador.cpp`
-  implementing `Nizk<P>::prove_response`/`verify_response` by translating
-  `ResponseStatement`/`ResponseWitness` into a `statement`/`witness` as in
-  §3, calling the prove/reduce loop, and serializing the resulting
-  transcript into `Proof::bytes`; parameter/modulus mapping as above;
-  benchmarks (pi2 prove/verify time, proof size) into `docs/benchmarks.md`.
+- **What M1 concretely builds** (`docs/roadmap.md`): ~~`src/nizk_labrador.cpp`
+  implementing `Nizk<P>::prove_response`/`verify_response`~~ — built, see
+  §3's implementation-status note. Remaining: benchmarks (pi2 prove/verify
+  time, proof size) into `docs/benchmarks.md` on an AVX-512 host.
 - **Testing deliverables (M1/T4):** soundness suite — wrong `h`, wrong `t`,
   non-ternary witness must fail `ldr_reduce`/`verify`; mutated transcripts
   rejected; mock vs. LaBRADOR cross-checks on identical instances. Note the

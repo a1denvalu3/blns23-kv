@@ -46,7 +46,16 @@ if(BLNSKV_WITH_LABRADOR)
   set_target_properties(labrador PROPERTIES C_STANDARD 23)
   target_link_libraries(blnskv PUBLIC labrador)
   target_compile_definitions(blnskv PUBLIC BLNSKV_WITH_LABRADOR=1)
-  # TODO: labrador-backed NIZK adapter (src/nizk_labrador.cpp)
+
+  # LaBRADOR-backed NIZK adapter (pi2). Needs the AVX-512 flags: the vendored
+  # headers declare __m512i-based types. Built into blnskv; labrador's include
+  # dir stays PRIVATE so its macro-heavy headers (N/K/L, fips202.h) never leak
+  # into our public interface.
+  target_sources(blnskv PRIVATE src/nizk_labrador.cpp)
+  set_source_files_properties(src/nizk_labrador.cpp PROPERTIES
+      COMPILE_OPTIONS "${LABRADOR_AVX512_FLAGS}"
+      INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/labrador_cxx_shim")
+  target_include_directories(blnskv PRIVATE third_party/labrador)
 
   # Vendored LaBRADOR self-tests. Running them needs an AVX-512 runtime; on
   # hosts without AVX-512, launch them under Intel SDE (expected unpacked in
