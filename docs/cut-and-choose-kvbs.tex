@@ -313,21 +313,47 @@ ring element is computationally indistinguishable under HMLWE, with a
 polynomial loss for guessing the lane and signing query.
 \end{lemma}
 
-This lemma is not yet the full result.  The cut-and-choose transcript establishes
-that a valid selected branch exists except with small probability, but it does
-not hand its witness to a black-box reduction.  A classical proof may rewind
-the Fiat--Shamir query and answer it with a different challenge; a QROM proof
-would need a measure-and-reprogram argument and an appropriate special-
-soundness property~\cite{DFM20}.  Moreover, ordinary pairwise special soundness extracts a
-witness only when both challenge branches can be opened.  A rigorous proof must
-show that an adversary succeeding on a non-negligible set of challenge vectors
-yields an extractable selected lane, rather than merely assert existence.
+The classical extraction step has a direct two-fork argument.  Fix the user's
+state immediately before its Fiat--Shamir query, and obtain two accepting
+transcripts with the same branch commitments but distinct challenges
+$\boldsymbol\chi\neq\boldsymbol\chi'$.  There is an index $j$ such that
+$\chi_j\neq\chi'_j$.  Because the challenges are binary,
+\[
+  \chi'_j=1-\chi_j=b_j^*.
+\]
+The second transcript therefore opens exactly the branch that was selected and
+left unopened in the first transcript.  Verification of that opening yields
+$(m_j^*,\rho_j^*,\mathbf r_j^*,\mathbf e_{2,j}^*)$, the witness required by
+the HMLWE reduction.
+
+\begin{lemma}[Two-fork selected-lane extraction]
+Two accepting transcripts with identical pair commitments and distinct
+challenge vectors reveal a valid witness for at least one branch selected in
+the first transcript (and symmetrically for one branch selected in the
+second).
+\end{lemma}
+
+The proof is the coordinate argument above and is information theoretic.  If a
+fixed commitment vector admits only one accepting challenge, its Fiat--Shamir
+success probability is $2^{-\kappa}$.  If a classical polynomial-time prover
+succeeds with non-negligible probability, the standard forking strategy---rewind
+at the challenge query and answer it independently---obtains two distinct
+accepting challenges with non-negligible probability, subject to the usual
+forking loss in the number of random-oracle queries.  Combining this extractor
+with the preceding HMLWE hybrid gives a plausible classical-ROM proof route.
+
+What remains unresolved is making the extractor online and adaptive for
+polynomially many signing queries and concurrent sessions, and then lifting it
+to the QROM.  Generic Fiat--Shamir proofs of knowledge do not automatically
+provide adaptive multi-theorem extraction, and quantum rewinding cannot simply
+copy the prover state.  A QROM proof would instead need a measure-and-reprogram
+argument and a suitable adaptive special-soundness theorem~\cite{DFM20}.
 
 One clean but expensive proof device is to replace $\mathsf{Com}$ by an
 extractable commitment, or attach an encryption-to-the-sky of each branch
 witness.  The security reduction then knows the extraction key and can recover
 the selected valid witness, while no such key exists in the real protocol.
-This avoids the rewinding gap but adds $2\kappa$ large lattice ciphertexts and
+This avoids adaptive rewinding but adds $2\kappa$ large lattice ciphertexts and
 may erase the proposed efficiency advantage.  Finding a lightweight
 extractability mechanism is therefore part of the contribution.
 
@@ -391,9 +417,9 @@ used for selective-failure tagging.
 
 \begin{enumerate}
  \item \textbf{One honest lane.} Prove the conjecture above for adversarially
- correlated, adaptively selected commitments.  In particular, bridge
- existential branch validity to witness extraction without assuming an
- impractically large extractable commitment.
+ correlated, adaptively selected commitments.  Complete the classical adaptive
+ multi-session forking reduction, then obtain a QROM extractor without assuming
+ an impractically large extractable commitment.
  \item \textbf{Related inputs across sessions.} Rule out differential attacks
  using fresh but algebraically related commitment vectors.  Exact replay
  prevention alone is insufficient.
