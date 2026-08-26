@@ -102,9 +102,10 @@ It is generally \emph{not} sufficient to retain only
 $\sum_i\mathbf s_i$, because different lanes authenticate different hash
 inputs.
 
-We require a binding commitment $\mathsf{Com}$ for the opening data and a
-batched lattice NIZK $\Pi_{\mathrm{resp}}$.  The latter contains no hash
-preimage relation.
+We require a batched lattice NIZK $\Pi_{\mathrm{resp}}$.  The latter contains
+no hash preimage relation.  No additional outer commitment is needed: the
+explicit values $\mathbf c_{i,b}$ are fixed by, and included in, the
+Fiat--Shamir challenge before any branch is opened.
 
 \section{Construction}
 
@@ -122,12 +123,11 @@ and computes
                      \mathbf r_{i,b},\mathbf e_{2,i,b}),\\
  \mathbf u_{i,b}&=H_R(\mathsf{credential\mbox{-}lane},i,m_{i,b},\rho_{i,b}),\\
  \mathbf c_{i,b}&=B_i\mathbf r_{i,b}+\mathbf e_{2,i,b}
-                   +\mathbf u_{i,b},\\
- C_{i,b}&=\mathsf{Com}(\mathsf{sid},i,b,\mathbf c_{i,b};\omega_{i,b}).
+                   +\mathbf u_{i,b}.
 \end{align*}
 The session identifier $\mathsf{sid}$ includes the protocol version, issuer,
 key epoch, and fresh contributions from both parties.  The user sends all
-$2\kappa$ values $(\mathbf c_{i,b},C_{i,b})$.
+$2\kappa$ values $\mathbf c_{i,b}$.
 
 \subsection{Fiat--Shamir challenge and opening}
 
@@ -135,17 +135,17 @@ After all commitments are fixed, the user derives
 \[
  \boldsymbol\chi=(\chi_0,\ldots,\chi_{\kappa-1})
  =H_{\mathrm{chal}}(\mathsf{protocol},\mathsf{issuer},\mathsf{pk},
-   \mathsf{sid},\{\mathbf c_{i,b},C_{i,b}\}_{i,b})
+   \mathsf{sid},\{\mathbf c_{i,b}\}_{i,b})
  \in\{0,1\}^{\kappa}.
 \]
 For every lane, the user opens branch $\chi_i$ by disclosing
 \[
  (m_{i,\chi_i},\rho_{i,\chi_i},\mathbf r_{i,\chi_i},
-   \mathbf e_{2,i,\chi_i},\omega_{i,\chi_i}).
+   \mathbf e_{2,i,\chi_i}).
 \]
 The user's first message contains all branch commitments, the challenge, and
-these openings.  The signer recomputes the challenge and checks the commitment,
-both hash computations, the linear relation, all norm bounds, canonical
+these openings.  The signer recomputes the challenge and checks both hash
+computations, the linear relation, all norm bounds, canonical
 encodings, and domain separators.  It aborts without producing any
 secret-dependent output if any check fails.  Define the selected branch
 $b_i^*=1-\chi_i$ and abbreviate
@@ -154,7 +154,7 @@ $\mathbf c_i^*=\mathbf c_{i,b_i^*}$.
 Thus issuance has the two-message form
 \[
  \mathsf{User}\longrightarrow\mathsf{Signer}:
- \{\mathbf c_{i,b},C_{i,b}\}_{i,b},\boldsymbol\chi,
+ \{\mathbf c_{i,b}\}_{i,b},\boldsymbol\chi,
  \{\mathsf{open}_{i,\chi_i}\}_i,
  \qquad
  \mathsf{Signer}\longrightarrow\mathsf{User}:h,\pi_{\mathrm{resp}}.
@@ -349,8 +349,8 @@ provide adaptive multi-theorem extraction, and quantum rewinding cannot simply
 copy the prover state.  A QROM proof would instead need a measure-and-reprogram
 argument and a suitable adaptive special-soundness theorem~\cite{DFM20}.
 
-One clean but expensive proof device is to replace $\mathsf{Com}$ by an
-extractable commitment, or attach an encryption-to-the-sky of each branch
+One clean but expensive proof device is to add an extractable commitment to
+each branch witness, or attach an encryption-to-the-sky of each branch
 witness.  The security reduction then knows the extraction key and can recover
 the selected valid witness, while no such key exists in the real protocol.
 This avoids adaptive rewinding but adds $2\kappa$ large lattice ciphertexts and
@@ -454,6 +454,70 @@ bandwidth.  The signer performs $\kappa$ hash-and-relation checks and one
 aggregate evaluation.
 The response NIZK is larger than the single-lane BLNS23 $\pi_2$, but is
 batchable and purely lattice algebraic.
+
+\subsection{Concrete communication estimate}
+
+We instantiate the wire calculation with the BLNS23 keyed-verification values
+$d=64$, $n=93$, $\lceil\log_2q\rceil=152$, $p=4$, and 32-byte messages and
+tags.  We take $\kappa=256$ as the conservative starting point for 128-bit
+post-quantum Fiat--Shamir grinding resistance.  Ring elements are packed at
+152 bits per coefficient.  Since the global norm bound is $\beta_s=78$, every
+coefficient of $\mathbf r$ and $\mathbf e_2$ lies in $[-78,78]$ and has a
+canonical signed one-byte encoding; a decoder rejects all noncanonical or
+out-of-range values.
+
+One commitment vector has exact packed length
+\[
+ |\mathbf c|=nd\lceil\log_2q\rceil
+ =93\cdot64\cdot152=904{,}704\text{ bits}=113{,}088\text{ bytes}.
+\]
+The $2\kappa=512$ commitment vectors therefore occupy 57,901,056 bytes.
+One opening contains two short vectors, one 32-byte message, and one 32-byte
+tag:
+\[
+ |\mathsf{open}|=2nd+32+32=11{,}968\text{ bytes}.
+\]
+The 256 openings occupy 3,063,808 bytes.  With a 32-byte session identifier,
+the exact fixed portion of the first message is therefore 60,964,896 bytes
+(58.14 MiB).  The challenge is recomputed and is not transmitted separately.
+
+The aggregate response $h\in R_q$ occupies
+\[
+ |h|=d\lceil\log_2q\rceil=64\cdot152=9{,}728\text{ bits}
+ =1{,}216\text{ bytes}.
+\]
+The second message has length $1{,}216+|\pi_{\mathrm{resp}}|$ bytes.  An exact
+total for that message requires an instantiated batched LaBRADOR relation and
+cannot be inferred from the asymptotic construction.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lr}
+\toprule
+Wire component & Bytes \\
+\midrule
+512 commitment vectors & 57,901,056 \\
+256 opened witnesses & 3,063,808 \\
+Session identifier & 32 \\
+User $\rightarrow$ signer, fixed total & 60,964,896 \\
+Aggregate $h$ & 1,216 \\
+Signer $\rightarrow$ user & $1,216+|\pi_{\mathrm{resp}}|$ \\
+MAC $(\rho_0,\ldots,\rho_{255},v)$ & 8,208 \\
+MAC plus 256 32-byte messages & 16,400 \\
+\bottomrule
+\end{tabular}
+\caption{Preliminary exact wire sizes under the stated canonical encoding.
+The batched response proof is not yet instantiated.}
+\label{tab:wire-size}
+\end{table}
+
+The MAC calculation uses 256 tags of 32 bytes and
+$d\log_2p=128$ bits for $v$:
+\[
+ |\mathsf{MAC}|=256\cdot32+16=8{,}208\text{ bytes}.
+\]
+If the messages are considered part of the stored credential rather than
+external signed data, 8,192 additional bytes give a 16,400-byte credential.
 
 The credential contains $\kappa$ message/tag pairs unless they admit a safe
 compression mechanism.  This is a major cost and must be included in any
