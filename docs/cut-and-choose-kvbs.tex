@@ -1,0 +1,390 @@
+\documentclass[10pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{microtype}
+
+\newtheorem{definition}{Definition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{conjecture}{Conjecture}
+\newtheorem{remark}{Remark}
+\newcommand{\R}{R_q}
+\newcommand{\sample}{\mathrel{\leftarrow\joinrel\$}}
+\newcommand{\roundp}[1]{\left\lceil #1\right\rfloor_p}
+
+\title{Cut-and-Choose Issuance for Compact Lattice-Based\\
+Keyed-Verification Credentials}
+\author{Anonymous draft}
+\date{Working draft --- security claims are provisional}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We investigate a cut-and-choose variant of the keyed-verification blind
+signature of Beullens, Lyubashevsky, Nguyen, and Seiler (BLNS23).  The goal is
+to remove the expensive first-round zero-knowledge proof that a user-supplied
+lattice commitment contains correctly evaluated hash functions.  A user sends
+two commitments in each of $\kappa$ independent lanes.  After an unpredictable
+challenge, the user opens one commitment per lane and the signer evaluates
+only the complementary commitments.  Crucially, the signer releases a single
+aggregate response rather than the lane responses.  A direct chosen-input
+attack must then evade all $\kappa$ checks to remove every honestly formed
+mask, which occurs with probability $2^{-\kappa}$.  The resulting credential
+authenticates a vector of hidden messages and is verified with the tuple of
+lane keys.  We give the construction, its correctness calculation, and a
+conditional security argument.  The central unresolved question is a robust
+``one honest lane'' lemma for adversarially correlated lattice inputs; until
+that lemma is proved under a standard assumption, the construction should be
+regarded as a candidate rather than a secure scheme.
+\end{abstract}
+
+\section{Introduction}
+
+BLNS23 gives a compact keyed-verification blind signature whose issuance
+protocol contains two non-interactive zero-knowledge proofs.  The user's proof
+$\pi_1$ establishes knowledge of short $\mathbf r,\mathbf e_2$ and a message
+$m$ satisfying
+\[
+  \rho=H_\rho(\mathbf r,\mathbf e_2),\qquad
+  \mathbf c=B\mathbf r+\mathbf e_2+H_R(m,\rho).
+\]
+This proof prevents a malicious user from choosing $\mathbf c$ so as to query
+the signing secret on a scaled unit vector.  Its statement includes hash
+evaluation and is the principal issuance bottleneck.
+
+We ask whether statistical cut-and-choose can replace $\pi_1$.  A naive
+construction with $N$ commitments, of which $N-1$ are opened, has soundness
+error $1/N$ and therefore requires an infeasible $N\geq 2^\lambda$.  Our
+candidate instead uses $\kappa$ pairs and returns only one aggregate response.
+If a single honestly generated unopened lane computationally masks all
+malformed lanes, a useful chosen-input attack must corrupt every unopened lane
+simultaneously.  Parallel repetition then gives error $2^{-\kappa}$.
+Applying Fiat--Shamir to the full vector of pair commitments places the
+challenge and openings in the user's first message.  The signer returns one
+aggregate response, giving a two-message, round-optimal issuance protocol.
+
+The construction changes the message space.  A credential authenticates a
+vector $(m_0,\ldots,m_{\kappa-1})$, not one message copied across all lanes.
+The opened message in every pair is a decoy; the complementary message remains
+hidden during issuance and is disclosed at presentation.  An application may
+derive a single payload by hashing the ordered vector.
+
+\paragraph{Status.}
+Correctness and the elementary cut-and-choose probability are immediate.  A
+complete proof of blindness and one-more unforgeability is not supplied here.
+In particular, Section~\ref{sec:open} identifies the one-honest-lane lemma,
+related-input security, selective failure, and concurrency as open obligations.
+
+\section{Preliminaries and notation}
+
+Let $\R=\mathbb Z_q[X]/(X^d+1)$.  Vectors are written in bold and all ring
+operations are modulo $q$.  Let $D_s,D_r,D_e$ be bounded short distributions,
+and let $\roundp{\cdot}$ retain the prescribed high-order coefficient bits.
+The security parameter and number of cut-and-choose lanes are denoted
+$\lambda$ and $\kappa$.  Classically, $\kappa=128$ targets 128-bit challenge
+soundness; in the quantum random-oracle model, $\kappa=256$ is the conservative
+starting point because of generic quadratic search speedups.
+
+For lane $i$, the signer samples
+\[
+  \mathbf s_i\sample D_s,\qquad \mathbf e_{1,i}\sample D_e,
+\]
+publishes a random matrix $B_i$ and
+\[
+  \mathbf t_i^T=\mathbf s_i^T B_i+\mathbf e_{1,i}^T.
+\]
+The keyed verification key is the tuple
+$\mathsf{sk}=(\mathbf s_0,\ldots,\mathbf s_{\kappa-1})$.
+It is generally \emph{not} sufficient to retain only
+$\sum_i\mathbf s_i$, because different lanes authenticate different hash
+inputs.
+
+We require a binding commitment $\mathsf{Com}$ for the opening data and a
+batched lattice NIZK $\Pi_{\mathrm{resp}}$.  The latter contains no hash
+preimage relation.
+
+\section{Construction}
+
+\subsection{Commit phase}
+
+The user independently constructs two branches $b\in\{0,1\}$ in each lane
+$i\in\{0,\ldots,\kappa-1\}$.  It samples
+\[
+ (\mathbf r_{i,b},\mathbf e_{2,i,b})\sample D_r\times D_e,
+ \quad m_{i,b}\sample\mathcal M,
+\]
+and computes
+\begin{align*}
+ \rho_{i,b}&=H_\rho(\mathsf{sid},i,b,
+                     \mathbf r_{i,b},\mathbf e_{2,i,b}),\\
+ \mathbf u_{i,b}&=H_R(\mathsf{credential\mbox{-}lane},i,m_{i,b},\rho_{i,b}),\\
+ \mathbf c_{i,b}&=B_i\mathbf r_{i,b}+\mathbf e_{2,i,b}
+                   +\mathbf u_{i,b},\\
+ C_{i,b}&=\mathsf{Com}(\mathsf{sid},i,b,\mathbf c_{i,b};\omega_{i,b}).
+\end{align*}
+The session identifier $\mathsf{sid}$ includes the protocol version, issuer,
+key epoch, and fresh contributions from both parties.  The user sends all
+$2\kappa$ values $(\mathbf c_{i,b},C_{i,b})$.
+
+\subsection{Fiat--Shamir challenge and opening}
+
+After all commitments are fixed, the user derives
+\[
+ \boldsymbol\chi=(\chi_0,\ldots,\chi_{\kappa-1})
+ =H_{\mathrm{chal}}(\mathsf{protocol},\mathsf{issuer},\mathsf{pk},
+   \mathsf{sid},\{\mathbf c_{i,b},C_{i,b}\}_{i,b})
+ \in\{0,1\}^{\kappa}.
+\]
+For every lane, the user opens branch $\chi_i$ by disclosing
+\[
+ (m_{i,\chi_i},\rho_{i,\chi_i},\mathbf r_{i,\chi_i},
+   \mathbf e_{2,i,\chi_i},\omega_{i,\chi_i}).
+\]
+The user's first message contains all branch commitments, the challenge, and
+these openings.  The signer recomputes the challenge and checks the commitment,
+both hash computations, the linear relation, all norm bounds, canonical
+encodings, and domain separators.  It aborts without producing any
+secret-dependent output if any check fails.  Define the selected branch
+$b_i^*=1-\chi_i$ and abbreviate
+$\mathbf c_i^*=\mathbf c_{i,b_i^*}$.
+
+Thus issuance has the two-message form
+\[
+ \mathsf{User}\longrightarrow\mathsf{Signer}:
+ \{\mathbf c_{i,b},C_{i,b}\}_{i,b},\boldsymbol\chi,
+ \{\mathsf{open}_{i,\chi_i}\}_i,
+ \qquad
+ \mathsf{Signer}\longrightarrow\mathsf{User}:h,\pi_{\mathrm{resp}}.
+\]
+Fiat--Shamir removes the challenge round but permits offline transcript
+grinding.  Prescribing $k$ challenge bits costs about $2^k$ classical
+random-oracle queries and about $2^{k/2}$ generic quantum queries.  A tight
+QROM proof is therefore required for the post-quantum parameter choice.  A
+fresh signer nonce limits precomputation, but adds a message unless it is
+already supplied by an authenticated session setup.
+
+\subsection{Aggregate response}
+
+The signer derives a bounded aggregate error deterministically from the entire
+selected transcript,
+\[
+ e=H_{D_e}(K,\mathsf{sid},\mathbf c_0^*,\ldots,
+                         \mathbf c_{\kappa-1}^*),
+\]
+and computes only
+\[
+ h=\sum_{i=0}^{\kappa-1}\mathbf s_i^T\mathbf c_i^*+e.
+\]
+No individual lane value is released or made observable through timing or
+errors.  The signer proves the batched relation
+\[
+ \mathcal R_{\mathrm{resp}}:\quad
+ \begin{cases}
+  h=\sum_i\mathbf s_i^T\mathbf c_i^*+e,\\
+  \mathbf t_i^T=\mathbf s_i^T B_i+\mathbf e_{1,i}^T
+       &\text{for every }i,\\
+  \|\mathbf s_i\|\leq\beta_s,
+  \ \|\mathbf e_{1,i}\|\leq\beta_e,
+  \ \|e\|\leq\beta_e.
+ \end{cases}
+\]
+The witness is the tuple of all component secrets and errors.  Proving knowledge
+only of $S=\sum_i\mathbf s_i$ is insufficient because the
+$\mathbf c_i^*$ differ.  The important efficiency observation is that
+$\mathcal R_{\mathrm{resp}}$ consists only of lattice-linear relations and
+norm bounds; it contains no hash evaluation.
+
+\subsection{Unblinding and presentation}
+
+After verifying the response proof, the user computes
+\[
+ v=\roundp{h-\sum_i\mathbf t_i^T\mathbf r_i^*}
+\]
+and stores
+\[
+ \sigma=((m_i^*,\rho_i^*)_{i=0}^{\kappa-1},v),
+ \quad (m_i^*,\rho_i^*)=(m_{i,b_i^*},\rho_{i,b_i^*}).
+\]
+At presentation, the keyed verifier accepts iff
+\[
+ v=\roundp{\sum_i\mathbf s_i^T
+        H_R(\mathsf{credential\mbox{-}lane},i,m_i^*,\rho_i^*)}.
+\]
+The issuance session identifier must not enter the presented lane hash: doing
+so would give the issuer a trivial linkage handle.  Session binding belongs in
+the cut-and-choose commitments and challenge, while issuance and presentation
+use the same credential-domain lane hash.  An application-level payload can be
+defined as
+\[
+ M=H_{\mathrm{final}}(\mathsf{issuer},\mathsf{type},
+              (m_i^*,\rho_i^*)_{i=0}^{\kappa-1}).
+\]
+
+\section{Correctness}
+
+For an honestly generated selected branch,
+\[
+ \mathbf c_i^*=B_i\mathbf r_i^*+\mathbf e_{2,i}^*+mathbf u_i^*.
+\]
+Consequently,
+\begin{align*}
+ h-\sum_i\mathbf t_i^T\mathbf r_i^*
+ &=\sum_i\mathbf s_i^T\mathbf u_i^*
+   +\sum_i\left(
+       \mathbf s_i^T\mathbf e_{2,i}^*
+       -\mathbf e_{1,i}^T\mathbf r_i^*\right)+e.
+\end{align*}
+Thus issuance and verification agree whenever the aggregate error does not
+cross a rounding boundary.  Compared with BLNS23, the error contains a sum of
+$\kappa$ lane errors.  Parameters therefore cannot be copied unchanged: the
+noise bound grows at least as $O(\sqrt\kappa)$ for independent errors and as
+$O(\kappa)$ under a worst-case norm bound.  This may require a larger $q$, a
+smaller rounding modulus $p$, or narrower lane distributions.
+
+\section{Cut-and-choose analysis}
+
+Call a branch \emph{openable} if its disclosed witness passes every opening
+check.  An accepted transcript has at least one openable branch in every pair.
+Suppose the adversary prepares one openable and one malformed branch in each of
+$k$ attacked lanes.  All malformed branches are selected exactly when the
+challenge opens the openable branch in every attacked lane, hence
+\[
+ \Pr[\text{all attacked selections malformed}]=2^{-k}.
+\]
+In particular, removing every honest mask across $\kappa$ lanes has probability
+$2^{-\kappa}$ per attempt, and at most $Q2^{-\kappa}$ over $Q$ attempts by a
+union bound.
+
+For the direct scaled-unit attack, the adversary sets every malformed selected
+commitment to $\alpha\mathbf e_j$.  If all lanes select those branches, then
+\[
+ h=\alpha\sum_i s_{i,j}+e,
+\]
+so rounding $h/\alpha$ exposes a coordinate of the summed key.  The event has
+probability $2^{-\kappa}$ per independent classical trial, while generic
+quantum Fiat--Shamir grinding costs about $2^{\kappa/2}$.  If any unopened lane
+is honest, its term remains in
+the aggregate and is intended to computationally mask the malformed terms.
+
+This last sentence is an assumption to be proved, not a consequence of the
+elementary probability calculation.
+
+\begin{conjecture}[One-honest-lane aggregate security]
+Let the adversary choose all branch pairs adaptively before receiving a uniform
+challenge, subject only to successful openings.  Conditioned on at least one
+selected branch being honestly distributed, aggregate responses from
+\[
+ h=\sum_i\mathbf s_i^T\mathbf c_i^*+e
+\]
+do not enable recovery of the key tuple, its useful aggregate, or a one-more
+credential forgery, even across polynomially many concurrent sessions with
+adversarially correlated fresh inputs.
+\end{conjecture}
+
+A paper claiming security must replace this conjecture with a reduction to a
+standard MLWE/MSIS-style problem, or state and justify a precise new assumption.
+
+\section{Blindness intuition}
+
+The issuer learns only the opened decoy branch in each lane.  The credential
+contains the complementary messages.  At presentation the issuer learns
+$(m_i^*,\rho_i^*)_i$ and can subtract their hashes from the stored unopened
+commitments, but deciding whether
+\[
+ \mathbf c_i^*-H_R(m_i^*,\rho_i^*)
+   =B_i\mathbf r_i^*+\mathbf e_{2,i}^*
+\]
+for short unknown values should be hidden by the underlying MLWE distribution.
+This suggests issuance--presentation unlinkability when opened and unopened
+messages have indistinguishable distributions.
+
+The response proof is necessary against a malicious issuer.  Without it, the
+issuer may use malformed component keys or signer-chosen errors to watermark
+credentials.  The proof must establish key-parameter consistency for every lane
+and at least constrain the aggregate error norm.  Proving deterministic PRF
+generation of the error would add a nonlinear relation and may undermine the
+claimed efficiency; alternatively, one must prove that every permitted bounded
+error is erased by rounding except with negligible probability and cannot be
+used for selective-failure tagging.
+
+\section{Open security obligations}\label{sec:open}
+
+\begin{enumerate}
+ \item \textbf{One honest lane.} Prove the conjecture above for adversarially
+ correlated, adaptively selected commitments.
+ \item \textbf{Related inputs across sessions.} Rule out differential attacks
+ using fresh but algebraically related commitment vectors.  Exact replay
+ prevention alone is insufficient.
+ \item \textbf{Selective failure.} Show that malicious challenges, aborts,
+ malformed response proofs, and rounding failures do not identify the hidden
+ branch vector at later presentation.
+ \item \textbf{Concurrency and reset security.} Bind every message to a unique
+ session and analyze interleaved, replayed, reset, and rolled-back sessions.
+ \item \textbf{One-more unforgeability.} Define the vector-message game and
+ handle linear combinations or splicing of components from multiple issued
+ credentials.
+ \item \textbf{Malicious-key security.} Prove that the batched response NIZK
+ gives key-parameter consistency and prevents subliminal tagging.
+ \item \textbf{Noise growth.} Instantiate parameters for the aggregate error
+ and bound the rounding-failure probability at the target security level.
+ \item \textbf{Fiat--Shamir and challenge entropy.} Give ROM and QROM analyses
+ accounting for adaptive transcript grinding, multi-target attacks, malicious
+ abort-and-restart strategies, and concurrency.  Determine whether
+ $\kappa=256$ tightly achieves 128-bit post-quantum soundness.
+ \item \textbf{Side channels and atomicity.} Ensure that no individual lane
+ response, partial sum, failing index, or timing signal is released.
+\end{enumerate}
+
+\section{Preliminary efficiency discussion}
+
+The candidate removes the hash-heavy user NIZK, replacing it with
+$2\kappa$ commitment constructions and $\kappa$ explicit openings.  For a
+classical target with $\kappa=128$, issuance sends 256 lattice commitments and
+opens 128 witnesses; the conservative post-quantum starting point doubles
+those figures.  Fiat--Shamir preserves two-message issuance despite this
+bandwidth.  The signer performs $\kappa$ hash-and-relation checks and one
+aggregate evaluation.
+The response NIZK is larger than the single-lane BLNS23 $\pi_2$, but is
+batchable and purely lattice algebraic.
+
+The credential contains $\kappa$ message/tag pairs unless they admit a safe
+compression mechanism.  This is a major cost and must be included in any
+comparison.  A credible evaluation should report total issuance bytes, prover
+and verifier time, credential bytes, presentation time, public-key size, secret
+key size, and rounding-failure probability.
+
+\section{Conclusion}
+
+Aggregate-only cut-and-choose offers a plausible route around the expensive
+hash-in-ZK issuance proof of BLNS23.  Its useful property is all-or-nothing:
+partial malformed selections remain mixed with at least one honest lane, while
+removing every honest lane costs $2^{-\kappa}$.  This intuition is potentially
+valuable, but it is not yet a theorem.  The next step is to formalize and prove
+the one-honest-lane lemma, or find a related-input counterexample.  Only after
+that step should concrete parameters or performance claims be treated as
+evidence for a deployable scheme.
+
+\begin{thebibliography}{9}
+\bibitem{BLNS23}
+W.~Beullens, V.~Lyubashevsky, N.~Nguyen, and G.~Seiler.
+\newblock Lattice-Based Blind Signatures: Short, Efficient, and Round-Optimal.
+\newblock IACR Cryptology ePrint Archive, Report 2023/077, 2023.
+\newblock \url{https://eprint.iacr.org/2023/077}.
+
+\bibitem{PCC22}
+R.~Chairattana-Apirom, L.~Hanzlik, J.~Loss, A.~Lysyanskaya, and B.~Wagner.
+\newblock $\Pi$-Cut-Choo and Friends: Compact Blind Signatures via Parallel
+Instance Cut-and-Choose and More.
+\newblock IACR Cryptology ePrint Archive, Report 2022/007, 2022.
+\newblock \url{https://eprint.iacr.org/2022/007}.
+
+\bibitem{BS22}
+W.~Beullens and G.~Seiler.
+\newblock LaBRADOR: Compact Proofs for R1CS from Module-SIS.
+\newblock IACR Cryptology ePrint Archive, 2022.
+\end{thebibliography}
+
+\end{document}
