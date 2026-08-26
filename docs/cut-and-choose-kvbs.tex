@@ -272,6 +272,83 @@ the aggregate and is intended to computationally mask the malformed terms.
 This last sentence is an assumption to be proved, not a consequence of the
 elementary probability calculation.
 
+\subsection{A partial masking lemma}
+
+The desired statement can be separated into an information-selection claim
+and a lattice-pseudorandomness claim.  Let
+$\mathsf{Valid}(i,b)$ denote the existence of an opening satisfying all lane
+relations.  For a fixed vector of branch commitments, there is at most one
+challenge $\boldsymbol\chi$ for which every opened branch is valid while every
+selected branch is invalid: in every pair it must open the unique valid branch.
+Consequently, a classical adversary making $q_H$ Fiat--Shamir trials reaches
+this all-invalid event with probability at most
+\[
+  q_H 2^{-\kappa},
+\]
+up to collisions and challenge bias.  In the QROM the corresponding generic
+bound has the expected quadratic loss, $O(q_H^2 2^{-\kappa})$.
+
+Now fix a selected lane $j$ for which a valid witness
+$(m_j,\rho_j,\mathbf r_j,\mathbf e_{2,j})$ is available to the reduction.
+Give the distinguisher all secrets outside lane $j$; this only strengthens it.
+It can subtract their contributions from the aggregate response.  What remains
+is the BLNS23 lane response
+\[
+ \mathbf s_j^T(B_j\mathbf r_j+\mathbf e_{2,j}
+       +H_R(m_j,\rho_j))+e.
+\]
+Using $\mathbf t_j^T\mathbf r_j$ to account for the blinding term and
+programming the keyed error exactly as in the BLNS23 HMLWE hybrid leaves a
+hashed MLWE evaluation under $\mathbf s_j$.  It is indistinguishable from a
+uniform ring element under HMLWE.  Since adding known or independently keyed
+malformed-lane contributions preserves uniformity, the entire aggregate is
+pseudorandom.
+
+\begin{lemma}[Extracted one-honest-lane masking, informal]
+In the random-oracle model, suppose a simulator obtains the witness of one
+valid selected lane in every accepted issuance, the lane keys are independent,
+and the aggregate error can be programmed as required by the BLNS23 HMLWE
+hybrid.  Then replacing the aggregate response of that issuance by a uniform
+ring element is computationally indistinguishable under HMLWE, with a
+polynomial loss for guessing the lane and signing query.
+\end{lemma}
+
+This lemma is not yet the full result.  The cut-and-choose transcript establishes
+that a valid selected branch exists except with small probability, but it does
+not hand its witness to a black-box reduction.  A classical proof may rewind
+the Fiat--Shamir query and answer it with a different challenge; a QROM proof
+would need a measure-and-reprogram argument and an appropriate special-
+soundness property~\cite{DFM20}.  Moreover, ordinary pairwise special soundness extracts a
+witness only when both challenge branches can be opened.  A rigorous proof must
+show that an adversary succeeding on a non-negligible set of challenge vectors
+yields an extractable selected lane, rather than merely assert existence.
+
+One clean but expensive proof device is to replace $\mathsf{Com}$ by an
+extractable commitment, or attach an encryption-to-the-sky of each branch
+witness.  The security reduction then knows the extraction key and can recover
+the selected valid witness, while no such key exists in the real protocol.
+This avoids the rewinding gap but adds $2\kappa$ large lattice ciphertexts and
+may erase the proposed efficiency advantage.  Finding a lightweight
+extractability mechanism is therefore part of the contribution.
+
+\subsection{Counterexamples to nearby variants}
+
+The analysis already gives concrete counterexamples to several tempting
+simplifications:
+\begin{enumerate}
+ \item If individual lane responses are released, attacking one pair succeeds
+ with probability $1/2$ and leakage accumulates across sessions.
+ \item If all lanes reuse the same secret $\mathbf s$, a malformed lane can be
+ correlated with an honest lane so that their coefficients cancel.  Independent
+ lane keys are essential.
+ \item If the Fiat--Shamir hash omits any branch commitment, public key, lane
+ index, or protocol domain, the omitted value can be chosen after the challenge.
+ \item If $\kappa=128$ is used against quantum users, Grover-style transcript
+ grinding gives only approximately 64 bits of generic work.
+ \item If responses or partial sums are emitted before all openings pass, one
+ malformed lane again becomes a probability-$1/2$ key-leakage oracle.
+\end{enumerate}
+
 \begin{conjecture}[One-honest-lane aggregate security]
 Let the adversary choose all branch pairs adaptively before receiving a uniform
 challenge, subject only to successful openings.  Conditioned on at least one
@@ -314,7 +391,9 @@ used for selective-failure tagging.
 
 \begin{enumerate}
  \item \textbf{One honest lane.} Prove the conjecture above for adversarially
- correlated, adaptively selected commitments.
+ correlated, adaptively selected commitments.  In particular, bridge
+ existential branch validity to witness extraction without assuming an
+ impractically large extractable commitment.
  \item \textbf{Related inputs across sessions.} Rule out differential attacks
  using fresh but algebraically related commitment vectors.  Exact replay
  prevention alone is insufficient.
@@ -385,6 +464,13 @@ Instance Cut-and-Choose and More.
 W.~Beullens and G.~Seiler.
 \newblock LaBRADOR: Compact Proofs for R1CS from Module-SIS.
 \newblock IACR Cryptology ePrint Archive, 2022.
+
+\bibitem{DFM20}
+J.~Don, S.~Fehr, and C.~Majenz.
+\newblock The Measure-and-Reprogram Technique 2.0: Multi-Round
+Fiat--Shamir and More.
+\newblock IACR Cryptology ePrint Archive, Report 2020/282, 2020.
+\newblock \url{https://eprint.iacr.org/2020/282}.
 \end{thebibliography}
 
 \end{document}
