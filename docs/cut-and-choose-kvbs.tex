@@ -3,6 +3,7 @@
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{booktabs}
 \usepackage{hyperref}
+\hypersetup{hidelinks}
 \usepackage{microtype}
 \usepackage{graphicx}
 \usepackage{tikz}
@@ -11,6 +12,7 @@
 \newtheorem{definition}{Definition}
 \newtheorem{theorem}{Theorem}
 \newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
 \newtheorem{conjecture}{Conjecture}
 \newtheorem{remark}{Remark}
 \newcommand{\R}{R_q}
@@ -39,10 +41,26 @@ mask, which occurs with probability $2^{-\kappa}$.  The resulting credential
 authenticates a vector of hidden messages and is verified with the tuple of
 lane keys.  We give the construction, its correctness calculation, and a
 conditional security argument.  The central unresolved question is a robust
-``one honest lane'' lemma for adversarially correlated lattice inputs; until
-that lemma is proved under a standard assumption, the construction should be
-regarded as a candidate rather than a secure scheme.
+``one honest lane'' lemma for adversarially correlated lattice inputs.  We
+identify a four-corner linear splicing attack whenever valid lane inputs can be
+reused across issuance sessions.  The current construction attempts to exclude
+that attack by deriving every $\rho$ from a unique session identifier.  We
+formalize the remaining requirement as majority-fresh aggregate HMLWE
+and prove reductions to ordinary HMLWE in two important special cases.  The
+fully adaptive, rotating-majority case required by the construction remains a
+new assumption.  We also give a balanced splicing attack costing
+$2^{\kappa/2}$ classically (or $2^{\kappa/4}$ with generic quantum search), so
+the construction remains unproven from standard MLWE and needs larger
+cut-and-choose parameters than the all-malformed analysis suggests.
 \end{abstract}
+
+\begin{center}
+\fbox{\parbox{0.92\linewidth}{\textbf{Security status.}
+The construction is unproven.  Section~\ref{sec:rectangle} gives a free break
+if valid lane inputs are reusable and a balanced malformed-copy splice even
+with session freshness.  It must not be implemented as a secure credential
+scheme without a full aggregate-HMLWE reduction and revised parameters.}}
+\end{center}
 
 \section{Introduction}
 
@@ -87,9 +105,11 @@ Let $\R=\mathbb Z_q[X]/(X^d+1)$.  Vectors are written in bold and all ring
 operations are modulo $q$.  Let $D_s,D_r,D_e$ be bounded short distributions,
 and let $\roundp{\cdot}$ retain the prescribed high-order coefficient bits.
 The security parameter and number of cut-and-choose lanes are denoted
-$\lambda$ and $\kappa$.  Classically, $\kappa=128$ targets 128-bit challenge
-soundness; in the quantum random-oracle model, $\kappa=256$ is the conservative
-starting point because of generic quadratic search speedups.
+$\lambda$ and $\kappa$.  The balanced splicing attack of
+Section~\ref{sec:rectangle} costs only about $2^{\kappa/2}$ classically and
+$2^{\kappa/4}$ under generic quantum search.  Consequently, 128-bit concrete
+security requires at least $\kappa=256$ in the classical ROM and $\kappa=512$
+in the QROM before accounting for multi-target and reduction losses.
 
 For lane $i$, the signer samples
 \[
@@ -362,6 +382,261 @@ noise bound grows at least as $O(\sqrt\kappa)$ for independent errors and as
 $O(\kappa)$ under a worst-case norm bound.  This may require a larger $q$, a
 smaller rounding modulus $p$, or narrower lane distributions.
 
+\section{Rectangle attacks and lane freshness}\label{sec:rectangle}
+
+The coordinate-wise aggregate MAC is additively separable.  If a valid lane
+input can be reused across issuance sessions, this gives a one-more forgery
+even when every commitment is honestly formed.  Ignore the small correctness
+error momentarily and define
+\[
+ F_i(x)=\mathbf s_i^T H_R(x),\qquad
+ Y(x_0,\ldots,x_{\kappa-1})=\sum_i F_i(x_i).
+\]
+Here $x_i=(m_i,\rho_i)$ and $Y$ is the value available to the user before final
+rounding.  Fix every coordinate except two, denoted $a$ and $b$, and choose two
+distinct valid inputs $x_a^0,x_a^1$ and $x_b^0,x_b^1$.  Let $Y_{uv}$ denote
+the aggregate with $x_a=x_a^u$ and $x_b=x_b^v$.  Three honest issuance queries
+give
+\begin{align*}
+ Y_{00}&=F_a(x_a^0)+F_b(x_b^0)+K,\\
+ Y_{10}&=F_a(x_a^1)+F_b(x_b^0)+K,\\
+ Y_{01}&=F_a(x_a^0)+F_b(x_b^1)+K,
+\end{align*}
+where $K$ is the fixed contribution of every other lane.  The user computes
+\begin{align*}
+ Y^*&=Y_{10}+Y_{01}-Y_{00}\\
+ &=F_a(x_a^1)+F_b(x_b^1)+K=Y_{11}.
+\end{align*}
+Thus three issued vector credentials yield the fourth corner, which was never
+issued.  All four message vectors are pairwise distinct.
+
+In the real protocol, the user has unblinded values
+\[
+ \widetilde Y_{uv}=h_{uv}-\sum_i\mathbf t_i^T\mathbf r_{i,uv}
+                  =Y_{uv}+\eta_{uv},
+\]
+where each $\eta_{uv}$ is a small correctness error.  It computes
+\[
+ \widetilde Y^*=\widetilde Y_{10}+\widetilde Y_{01}-\widetilde Y_{00}
+ =Y_{11}+(\eta_{10}+\eta_{01}-\eta_{00})
+\]
+and rounds $\widetilde Y^*$.  The combined error grows by only a constant
+factor.  With the correctness margin required by the scheme, it crosses a
+rounding boundary only with negligible probability.  The resulting MAC for
+the unqueried vector $(x_a^1,x_b^1)$ therefore verifies.
+
+\begin{theorem}[Three-query forgery under reusable lane inputs]
+For $\kappa\geq2$, suppose valid values $x_i=(m_i,\rho_i)$ may be repeated in
+different issuance sessions and the correctness error remains negligible under
+a three-term signed sum.  Then the coordinate-wise aggregate construction is
+not one-more unforgeable: three honest issuance queries produce four
+pairwise-distinct valid vector-message credentials.
+\end{theorem}
+
+The same identity refutes any stronger aggregate-HMLWE assumption that permits
+cross-query reuse of valid coordinate inputs.  Four oracle queries satisfy
+\[
+ \widetilde Y_{00}+\widetilde Y_{11}
+ -\widetilde Y_{10}-\widetilde Y_{01}
+ =\eta_{00}+\eta_{11}-\eta_{10}-\eta_{01},
+\]
+which is small.  For a true random oracle, the left-hand side is uniform in
+$R_q$.  A centered-norm test therefore distinguishes the aggregate oracle from
+random with overwhelming advantage.
+
+In the current construction, however,
+\[
+ \rho_{i,b}=H_\rho(\mathsf{sid},i,b,\mathbf r_{i,b},\mathbf e_{2,i,b})
+\]
+contains a signer-backed, globally unique $\mathsf{sid}$.  Reusing the same
+$x_i=(m_i,\rho_i)$ in a second session would require finding a cross-session
+preimage or collision for $H_\rho$.  The rectangle attack therefore motivates
+a mandatory rule: session identifiers must never repeat within a key epoch,
+and every valid lane input used in the aggregate-HMLWE game must be fresh across
+issuance queries.  The fully honest attack does not prove that a
+freshness-restricted game is secure; it establishes that no theorem without
+the restriction can be true.  A repaired proof must also cover concurrency, rollback, and distributed
+replay-state failures that could violate uniqueness.
+
+Session freshness does not remove every use of the rectangle identity.  A
+selected malformed branch need not claim the old message: because it is never
+opened, its residual can simply copy a previously observed hash coefficient.
+Partition the lanes into $A\mathbin{\dot\cup}B=[\kappa]$.  First obtain an
+honest baseline
+\[
+ Y_{00}=\sum_{i\in A}F_i(x_i^0)+\sum_{i\in B}F_i(x_i^0).
+\]
+In a second issuance use fresh honest inputs $x_i^1$ in $A$ and copied,
+malformed baseline coefficients in $B$; in a third do the converse.  Conditional
+on the required Fiat--Shamir challenges, the resulting values are
+\begin{align*}
+ Y_{10}&=\sum_{i\in A}F_i(x_i^1)+\sum_{i\in B}F_i(x_i^0),\\
+ Y_{01}&=\sum_{i\in A}F_i(x_i^0)+\sum_{i\in B}F_i(x_i^1).
+\end{align*}
+Hence $Y_{10}+Y_{01}-Y_{00}=Y_{11}$ as before, although every \emph{valid}
+input is session-fresh.  The second issuance requires selecting $|B|$
+malformed branches and the third requires selecting $|A|$.  A balanced
+partition therefore costs about $2^{\kappa/2}$ classical random-oracle trials,
+or $2^{\kappa/4}$ generic quantum trials.  This is still exponential, but it
+shows that analyzing only the all-$\kappa$-malformed event overstates concrete
+security by a square in the classical ROM and by a fourth-power in the QROM.
+
+The balanced attack is optimal within a natural copy-and-combine class.
+Model each distinct lane coefficient as an independent formal atom and call an
+occurrence a \emph{copy} if the same atom occurred earlier in that lane.
+
+\begin{theorem}[Half-copy lower bound for formal linear splicing]
+Let $Q\geq2$ issued aggregates be combined with nonzero coefficients
+$\alpha_1,\ldots,\alpha_Q\in R_q$ to produce an unissued aggregate containing
+one target atom in every lane.  If the identity holds for every assignment of
+the lane atoms, then some issuance after the first contains copies in at least
+$\kappa/2$ lanes.
+\end{theorem}
+
+\begin{proof}
+Fix a lane and group the $Q$ occurrences according to equal atoms.  The group
+containing the target atom must have coefficient sum one; every other group
+must have coefficient sum zero.  Because every $\alpha_j$ is nonzero, a
+zero-sum group has at least two occurrences.  At most one group---the target
+group---can be a singleton.  Consequently at most
+$1+\lfloor(Q-1)/2\rfloor$ different atoms occur in this lane, so at least
+$\lceil(Q-1)/2\rceil$ occurrences are copies.  Summing over all $\kappa$ lanes
+gives at least $\kappa\lceil(Q-1)/2\rceil$ copy incidences.  No occurrence in
+the first issuance is a copy.  Averaging over the remaining $Q-1$ issuances
+therefore puts at least
+\[
+ \frac{\kappa\lceil(Q-1)/2\rceil}{Q-1}\geq\frac\kappa2
+\]
+copies in one issuance.
+\end{proof}
+
+With session-bound validity, such copied atoms must occur in unopened malformed
+branches except with a hash collision.  Thus every formal linear splice fixes
+at least $\kappa/2$ challenge bits in one issuance.  This theorem does not rule
+out lattice-specific attacks using short nontrivial relations among distinct
+hash vectors; excluding those is part of the mfr-AHMLWE assumption.
+
+\section{Majority-fresh aggregate HMLWE}\label{sec:fr-ahmlwe}
+
+We isolate the exact pseudorandomness property needed after the usual BLNS23
+hybrids have removed the public blinding terms.  This abstraction intentionally
+separates the lattice question from Fiat--Shamir extraction.
+
+Let $G_i:\{0,1\}^*\rightarrow R_q^n$ be independent random oracles, let
+$\mathbf s_i\sample D_s^n$ for $i\in[\kappa]$, and let $D_E$ be the aggregate
+error distribution.  In query $j$, an adaptive adversary submits
+\[
+  (\mathbf a_{j,0},\ldots,\mathbf a_{j,\kappa-1}),
+  \qquad V_j\subseteq[\kappa],\quad |V_j|>\kappa/2,
+\]
+together with strings $\mu_{j,i}$ for $i\in V_j$.  The query is admissible if
+\[
+  \mathbf a_{j,i}=G_i(\mu_{j,i})\quad(i\in V_j)
+\]
+and every pair $(i,\mu_{j,i})$ is fresh among earlier admissible queries.  The
+coordinates outside $V_j$ are arbitrary and may depend on the entire previous
+transcript and on all random-oracle answers seen so far.  The real oracle
+returns
+\[
+  z_j=\sum_{i=0}^{\kappa-1}\mathbf s_i^T\mathbf a_{j,i}+e_j,
+  \qquad e_j\sample D_E,
+\]
+whereas the ideal oracle returns an independent uniform element of $R_q$.
+The \emph{majority-fresh aggregate HMLWE} (mfr-AHMLWE) assumption states that
+these two adaptive experiments are computationally indistinguishable.
+In the protocol, $\mu_{j,i}$ represents the session-bound pair
+$(m_{j,i},\rho_{j,i})$ and $V_j$ is the set of selected branches for which the
+extractor obtains valid witnesses.  A complete reduction must additionally
+show that the real aggregate error is distributed as, or indistinguishable
+from, $D_E$.
+
+The majority and freshness conditions are stronger than mere uniqueness of the complete
+message vector: it forbids reuse of a valid coordinate under the same lane
+key and requires fewer than half the selected coordinates to be malformed.
+Section~\ref{sec:rectangle} proves both restrictions are necessary for the
+claimed concrete security.  The definition does not
+restrict an arbitrary malformed coordinate from repeating a previous ring
+element; that behavior is deliberately included in the assumption.
+
+\begin{lemma}[Fixed honest lane special case]
+Suppose there is an index $i^*$ such that $i^*\in V_j$ in every aggregate
+query.  Then mfr-AHMLWE reduces to ordinary HMLWE for lane $i^*$, with a factor
+at most $\kappa$ if the reduction must guess $i^*$.
+\end{lemma}
+
+\begin{proof}
+Embed the HMLWE secret in lane $i^*$ and sample every other lane secret
+locally.  On query $j$, freshness gives a new HMLWE message
+$\mu_{j,i^*}$.  Obtain
+$b_j=\mathbf s_{i^*}^TG_{i^*}(\mu_{j,i^*})+e_j$ from the HMLWE oracle and
+return
+\[
+ b_j+\sum_{i\ne i^*}\mathbf s_i^T\mathbf a_{j,i}.
+\]
+This is a perfect real simulation.  If $b_j$ is uniform, adding the locally
+computed term preserves uniformity and gives the ideal experiment.  The
+arbitrary coordinates cause no simulation problem because their corresponding
+secrets were sampled by the reduction.
+\end{proof}
+
+\begin{corollary}[All lanes valid]
+If $V_j=[\kappa]$ in every query, mfr-AHMLWE reduces to ordinary HMLWE (and
+hence, in the random-oracle model, to MLWE by BLNS23 Lemma~4.3).
+\end{corollary}
+
+\begin{proof}
+Choose any fixed lane $i^*$ and apply the preceding lemma.  This route is
+preferable to treating the concatenation of all lane hashes as one atomic
+random oracle: the adversary may query the component random oracles separately
+before deciding which values to combine.
+\end{proof}
+
+Neither lemma proves the general game.  Majority sets intersect pairwise, but
+polynomially many majority sets need not have a common element.  Thus one may
+still have no lane valid in every query.  A reduction
+that embeds its unknown HMLWE secret in lane $i$ must then answer queries in
+which $i\notin V_j$ and $\mathbf a_{j,i}$ is adversarially chosen.  Doing so
+requires the unavailable value $\mathbf s_i^T\mathbf a_{j,i}$; an ordinary
+HMLWE oracle only evaluates fresh hashed inputs.  Guessing the lane or signing
+query does not supply these missing evaluations.  Thus the standard BLNS23
+reduction proves the two lemmas above but not the adaptive rotating-cover case.
+We make the rotating-majority case an explicit assumption rather than silently
+treating it as a consequence of MLWE.
+
+\begin{theorem}[Conditional adaptive aggregate masking]
+Assume binding of the global commitment, simultaneous extraction of every
+valid selected branch needed to identify $V_j$, the BLNS23 hybrids mapping
+valid lane residuals to $G_i(\mu)$ with
+aggregate error $D_E$, and mfr-AHMLWE.  For a classical adversary making at
+most $q_H$ Fiat--Shamir trials, all accepted aggregate responses may be
+replaced by independent uniform ring elements with distinguishing loss at most
+\[
+ \operatorname{Adv}_{\mathrm{mfr\text{-}AHMLWE}}
+ +q_H2^{-\kappa/2}+\varepsilon_{\mathrm{ext}}
+ +\varepsilon_{\mathrm{hyb}},
+\]
+where $\varepsilon_{\mathrm{ext}}$ and $\varepsilon_{\mathrm{hyb}}$ are the
+extraction and BLNS23-hybrid failure probabilities.  In the QROM, the generic
+challenge-search term becomes $O(q_H^2 2^{-\kappa/2})$, in addition to the
+losses of the required QROM extractor.
+\end{theorem}
+
+\begin{proof}
+Except with extraction failure, let $V_j$ contain all valid selected branches.
+If $|V_j|\leq\kappa/2$, at least $\kappa/2$
+selected branches are malformed.  For a fixed committed branch vector,
+acceptance then fixes at least $\kappa/2$ independent challenge bits.  A union
+bound over classical Fiat--Shamir trials gives $q_H2^{-\kappa/2}$; generic
+quantum search gives the stated quadratic-query bound.  Conditioned on the
+complementary event, every accepted query satisfies $|V_j|>\kappa/2$.
+Session-bound $\rho$ values make its valid lane messages fresh except with a
+hash collision.  After the stipulated BLNS23 hybrids, the simulator submits
+the extracted $V_j$, valid messages, and arbitrary remaining residuals to its
+mfr-AHMLWE oracle.  The real oracle reproduces the aggregate response; the
+ideal oracle supplies the uniform replacement.  Adding the bad-event and
+hybrid losses proves the claim.
+\end{proof}
+
 \section{Cut-and-choose analysis}
 
 Call a branch \emph{openable} if its disclosed witness passes every opening
@@ -390,7 +665,7 @@ the aggregate and is intended to computationally mask the malformed terms.
 This last sentence is an assumption to be proved, not a consequence of the
 elementary probability calculation.
 
-\subsection{A partial masking lemma}
+\subsection{Extraction needed by the majority-fresh game}
 
 The desired statement can be separated into an information-selection claim
 and a lattice-pseudorandomness claim.  Let
@@ -406,30 +681,12 @@ this all-invalid event with probability at most
 up to collisions and challenge bias.  In the QROM the corresponding generic
 bound has the expected quadratic loss, $O(q_H^2 2^{-\kappa})$.
 
-Now fix a selected lane $j$ for which a valid witness
-$(m_j,\rho_j,\mathbf r_j,\mathbf e_{2,j})$ is available to the reduction.
-Give the distinguisher all secrets outside lane $j$; this only strengthens it.
-It can subtract their contributions from the aggregate response.  What remains
-is the BLNS23 lane response
-\[
- \mathbf s_j^T(B_j\mathbf r_j+\mathbf e_{2,j}
-       +H_R(m_j,\rho_j))+e.
-\]
-Using $\mathbf t_j^T\mathbf r_j$ to account for the blinding term and
-programming the keyed error exactly as in the BLNS23 HMLWE hybrid leaves a
-hashed MLWE evaluation under $\mathbf s_j$.  It is indistinguishable from a
-uniform ring element under HMLWE.  Since adding known or independently keyed
-malformed-lane contributions preserves uniformity, the entire aggregate is
-pseudorandom.
-
-\begin{lemma}[Extracted one-honest-lane masking, informal]
-In the random-oracle model, suppose a simulator obtains the witness of one
-valid selected lane in every accepted issuance, the lane keys are independent,
-and the aggregate error can be programmed as required by the BLNS23 HMLWE
-hybrid.  Then replacing the aggregate response of that issuance by a uniform
-ring element is computationally indistinguishable under HMLWE, with a
-polynomial loss for guessing the lane and signing query.
-\end{lemma}
+For one isolated issuance, knowledge of one valid selected witness is enough
+to invoke an HMLWE mask after sampling every other lane key locally.  Across
+adaptive issuances this argument is sound only if the same embedded lane stays
+valid, as proved in Section~\ref{sec:fr-ahmlwe}.  It does not establish the
+rotating-majority game: when the embedded lane is malformed, the simulator is
+asked for an arbitrary inner product under an unknown secret.
 
 The classical extraction step has a direct two-fork argument.  Fix the user's
 state immediately before its Fiat--Shamir query, and obtain two accepting
@@ -452,7 +709,15 @@ the first transcript (and symmetrically for one branch selected in the
 second).
 \end{lemma}
 
-The proof is the coordinate argument above and is information theoretic.  If a
+The proof is the coordinate argument above and is information theoretic, but
+it extracts only one selected branch.  The conditional theorem in
+Section~\ref{sec:fr-ahmlwe} needs the witnesses of a strict majority of selected
+branches.  Repeating the fork does not automatically provide them: accepting
+challenges can differ repeatedly in the same small set of coordinates.  A
+multi-fork extractor must either force sufficiently broad challenge coverage
+or use an independently extractable branch commitment.
+
+If a
 fixed commitment vector admits only one accepting challenge, its Fiat--Shamir
 success probability is $2^{-\kappa}$.  If a classical polynomial-time prover
 succeeds with non-negligible probability, the standard forking strategy---rewind
@@ -488,26 +753,19 @@ simplifications:
  lane keys are essential.
  \item If the Fiat--Shamir hash omits any branch commitment, public key, lane
  index, or protocol domain, the omitted value can be chosen after the challenge.
- \item If $\kappa=128$ is used against quantum users, Grover-style transcript
- grinding gives only approximately 64 bits of generic work.
+ \item If $\kappa=128$ is used against quantum users, the balanced splice has
+only approximately 32 bits of generic quantum work.
  \item If responses or partial sums are emitted before all openings pass, one
  malformed lane again becomes a probability-$1/2$ key-leakage oracle.
 \end{enumerate}
 
-\begin{conjecture}[One-honest-lane aggregate security]
-Let the adversary choose all branch pairs adaptively before receiving a uniform
-challenge, subject only to successful openings.  Conditioned on at least one
-selected branch being honestly distributed, aggregate responses from
-\[
- h=\sum_i\mathbf s_i^T\mathbf c_i^*+e
-\]
-do not enable recovery of the key tuple, its useful aggregate, or a one-more
-credential forgery, even across polynomially many concurrent sessions with
-adversarially correlated fresh inputs.
-\end{conjecture}
-
-A paper claiming security must replace this conjecture with a reduction to a
-standard MLWE/MSIS-style problem, or state and justify a precise new assumption.
+The unrestricted ``one-honest-lane aggregate security'' conjecture, which
+allows reuse of a valid lane input, is false by Section~\ref{sec:rectangle}.
+For globally fresh valid inputs, Section~\ref{sec:fr-ahmlwe} proves the
+all-lanes-valid and fixed-honest-lane cases from ordinary HMLWE.  Security with
+an adaptively rotating majority of valid lanes is exactly the remaining
+mfr-AHMLWE
+assumption; no reduction to ordinary MLWE is presently claimed.
 
 \section{Blindness intuition}
 
@@ -532,24 +790,27 @@ claimed efficiency; alternatively, one must prove that every permitted bounded
 error is erased by rounding except with negligible probability and cannot be
 used for selective-failure tagging.
 
-\section{Open security obligations}\label{sec:open}
+\section{Requirements for a full proof}\label{sec:open}
 
 \begin{enumerate}
- \item \textbf{One honest lane.} Prove the conjecture above for adversarially
- correlated, adaptively selected commitments.  Complete the classical adaptive
- multi-session forking reduction, then obtain a QROM extractor without assuming
- an impractically large extractable commitment.
- \item \textbf{Related inputs across sessions.} Rule out differential attacks
- using fresh but algebraically related commitment vectors.  Exact replay
- prevention alone is insufficient.
+ \item \textbf{Fresh aggregate pseudorandomness.} Prove mfr-AHMLWE from a
+standard lattice assumption, or state and cryptanalyze it as a new assumption.
+The proof must permit arbitrary malformed coordinates and an adaptively
+rotating strict majority of fresh valid coordinates.
+ \item \textbf{Global lane freshness.} Enforce non-repeating session
+identifiers across concurrency, crashes, rollback, and distributed signer
+replicas, and bind $\rho$ to that identifier as in the construction above.
+ \item \textbf{Related inputs across sessions.} Prove security for fresh but
+algebraically related message vectors; coordinate freshness blocks the fully
+honest rectangle but not the balanced malformed-copy splice, and does not by
+itself establish pseudorandomness.
  \item \textbf{Selective failure.} Show that malicious challenges, aborts,
  malformed response proofs, and rounding failures do not identify the hidden
  branch vector at later presentation.
  \item \textbf{Concurrency and reset security.} Bind every message to a unique
  session and analyze interleaved, replayed, reset, and rolled-back sessions.
- \item \textbf{One-more unforgeability.} Define the vector-message game and
- handle linear combinations or splicing of components from multiple issued
- credentials.
+ \item \textbf{One-more unforgeability.} Define the repaired message space and
+ rule out linear combinations or splicing of issued credentials.
  \item \textbf{Malicious-key security.} Prove that the batched response NIZK
  gives key-parameter consistency and prevents subliminal tagging.
  \item \textbf{Noise growth.} Instantiate parameters for the aggregate error
@@ -557,7 +818,8 @@ used for selective-failure tagging.
  \item \textbf{Fiat--Shamir and challenge entropy.} Give ROM and QROM analyses
  accounting for adaptive transcript grinding, multi-target attacks, malicious
  abort-and-restart strategies, and concurrency.  Determine whether
- $\kappa=256$ tightly achieves 128-bit post-quantum soundness.
+ $\kappa=512$ tightly achieves 128-bit post-quantum soundness after accounting
+for the balanced splicing attack.
  \item \textbf{Side channels and atomicity.} Ensure that no individual lane
  response, partial sum, failing index, or timing signal is released.
 \end{enumerate}
@@ -566,8 +828,8 @@ used for selective-failure tagging.
 
 The candidate removes the hash-heavy user NIZK, replacing it with
 $2\kappa$ hash commitments and $\kappa$ seeded openings.  For a
-classical target with $\kappa=128$, issuance sends 256 lattice commitments and
-opens 128 witnesses; the conservative post-quantum starting point doubles
+classical target with $\kappa=256$, issuance prepares 512 lattice commitments
+and opens 256 witnesses; the post-quantum starting point $\kappa=512$ doubles
 those figures.  Fiat--Shamir preserves two-message issuance despite this
 bandwidth.  The signer performs $\kappa$ hash-and-relation checks and one
 aggregate evaluation.
@@ -578,8 +840,8 @@ batchable and purely lattice algebraic.
 
 We instantiate the wire calculation with the BLNS23 keyed-verification values
 $d=64$, $n=93$, $\lceil\log_2q\rceil=152$, $p=4$, and 32-byte messages and
-tags.  We take $\kappa=256$ as the conservative starting point for 128-bit
-post-quantum Fiat--Shamir grinding resistance.  Ring elements are packed at
+tags.  We take $\kappa=512$ as the minimum starting point for 128-bit
+post-quantum resistance to the balanced Fiat--Shamir splice.  Ring elements are packed at
 152 bits per coefficient.  Branch openings are 32-byte seeds and the single
 global branch commitment is a 48-byte digest.
 
@@ -588,10 +850,10 @@ One commitment vector has exact packed length
  |\mathbf c|=nd\lceil\log_2q\rceil
  =93\cdot64\cdot152=904{,}704\text{ bits}=113{,}088\text{ bytes}.
 \]
-Only the $\kappa=256$ unopened vectors are transmitted in full, occupying
-28,950,528 bytes.  The global commitment occupies 48 bytes and the 256 opened
-seeds occupy 8,192 bytes.  With a 32-byte session identifier, the exact fixed
-portion of the first message is therefore 28,958,800 bytes (27.62 MiB).
+Only the $\kappa=512$ unopened vectors are transmitted in full, occupying
+57,901,056 bytes.  The global commitment occupies 48 bytes and the 512 opened
+seeds occupy 16,384 bytes.  With a 32-byte session identifier, the exact fixed
+portion of the first message is therefore 57,917,520 bytes (55.23 MiB).
 The challenge is recomputed and is not transmitted separately.  Relative to
 transmitting all commitment vectors and explicit witnesses, seeded openings
 reduce the first message by approximately 52.5\%.
@@ -611,15 +873,15 @@ cannot be inferred from the asymptotic construction.
 \toprule
 Wire component & Bytes \\
 \midrule
-256 unopened commitment vectors & 28,950,528 \\
+512 unopened commitment vectors & 57,901,056 \\
 One 48-byte global commitment & 48 \\
-256 32-byte opened seeds & 8,192 \\
+512 32-byte opened seeds & 16,384 \\
 Session identifier & 32 \\
-User $\rightarrow$ signer, fixed total & 28,958,800 \\
+User $\rightarrow$ signer, fixed total & 57,917,520 \\
 Aggregate $h$ & 1,216 \\
 Signer $\rightarrow$ user & $1,216+|\pi_{\mathrm{resp}}|$ \\
-MAC $(\rho_0,\ldots,\rho_{255},v)$ & 8,208 \\
-MAC plus 256 32-byte messages & 16,400 \\
+MAC $(\rho_0,\ldots,\rho_{511},v)$ & 16,400 \\
+MAC plus 512 32-byte messages & 32,784 \\
 \bottomrule
 \end{tabular}
 \caption{Preliminary exact wire sizes with seeded openings and one 384-bit
@@ -628,13 +890,13 @@ The batched response proof is not yet instantiated.}
 \label{tab:wire-size}
 \end{table}
 
-The MAC calculation uses 256 tags of 32 bytes and
+The MAC calculation uses 512 tags of 32 bytes and
 $d\log_2p=128$ bits for $v$:
 \[
- |\mathsf{MAC}|=256\cdot32+16=8{,}208\text{ bytes}.
+ |\mathsf{MAC}|=512\cdot32+16=16{,}400\text{ bytes}.
 \]
 If the messages are considered part of the stored credential rather than
-external signed data, 8,192 additional bytes give a 16,400-byte credential.
+external signed data, 16,384 additional bytes give a 32,784-byte credential.
 
 \subsection{Optional optimization: higher-arity cut-and-choose}
 
@@ -651,12 +913,14 @@ with probability
 \[
  A^{-g}=2^{-ag}.
 \]
-For a conservative 128-bit post-quantum grinding target we require
-$ag\geq256$.  Only $g$ full lattice vectors are then transmitted.  Ignoring
+The balanced splice constrains about half of the groups, so its generic quantum
+cost is approximately $2^{ag/4}$.  For a 128-bit post-quantum target we
+therefore require $ag\geq512$.  Only $g$ full lattice vectors are then
+transmitted.  Ignoring
 the response proof, the fixed first-message size is
 \[
  g|\mathbf c|+g(A-1)\cdot32+48+32\text{ bytes},
- \qquad g=\left\lceil\frac{256}{\log_2 A}\right\rceil.
+ \qquad g=\left\lceil\frac{512}{\log_2 A}\right\rceil.
 \]
 
 \begin{table}[h]
@@ -665,14 +929,14 @@ the response proof, the fixed first-message size is
 \toprule
 $A$ & $g$ & challenge bits & generated branches & first message \\
 \midrule
-2   & 256 & 256 & 512   & 27.62 MiB \\
-4   & 128 & 256 & 512   & 13.82 MiB \\
-16  & 64  & 256 & 1,024 & 6.93 MiB \\
-32  & 52  & 260 & 1,664 & 5.66 MiB \\
-64  & 43  & 258 & 2,752 & 4.72 MiB \\
-256 & 32  & 256 & 8,192 & 3.70 MiB \\
-512 & 29  & 261 & 14,848 & 3.58 MiB \\
-1024& 26  & 260 & 26,624 & 3.62 MiB \\
+2   & 512 & 512 & 1,024  & 55.23 MiB \\
+4   & 256 & 512 & 1,024  & 27.63 MiB \\
+16  & 128 & 512 & 2,048  & 13.86 MiB \\
+32  & 103 & 515 & 3,296  & 11.21 MiB \\
+64  & 86  & 516 & 5,504  & 9.44 MiB \\
+256 & 64  & 512 & 16,384 & 7.40 MiB \\
+512 & 57  & 513 & 29,184 & 7.04 MiB \\
+1024& 52  & 520 & 53,248 & 7.23 MiB \\
 \bottomrule
 \end{tabular}
 \caption{Bandwidth/computation tradeoff for higher-arity cut-and-choose.
@@ -681,16 +945,16 @@ The branch count approximates user generation and signer opening work.}
 \end{table}
 
 For bandwidth alone, the stated parameters are minimized near $A=512$, where
-the first message is 3,753,840 bytes (3.58 MiB): 29 full vectors consume
-3,279,552 bytes, 14,819 opened seeds consume 474,208 bytes, and the global
+the first message is 7,378,160 bytes (7.04 MiB): 57 full vectors consume
+6,446,016 bytes, 29,127 opened seeds consume 932,064 bytes, and the global
 commitment plus session identifier consume 80 bytes.  The corresponding MAC
-contains 29 tags and one 16-byte rounded value, hence
+contains 57 tags and one 16-byte rounded value, hence
 \[
- 29\cdot32+16=944\text{ bytes}.
+ 57\cdot32+16=1{,}840\text{ bytes}.
 \]
-This setting requires generating and checking 14,848 branches, however, versus
-512 in the binary construction.  Values such as $A=16$ or $A=32$ may therefore
-give a better end-to-end tradeoff: they reduce issuance to 6.93 or 5.66 MiB
+This setting requires generating and checking 29,184 branches, however, versus
+1,024 in the binary construction.  Values such as $A=16$ or $A=32$ may therefore
+give a better end-to-end tradeoff: they reduce issuance to 13.86 or 11.21 MiB
 while increasing branch computation by only two to three times.  A benchmark
 must include deterministic expansion, hash-to-ring, matrix--vector products,
 and response-proof scaling before selecting $A$.
@@ -701,12 +965,12 @@ branch selected in the first.  The proof must use an $A$-ary challenge and bind
 all branches in the global commitment.
 
 This optimization changes the key shape and is not merely a wire encoding.
-In the binary base scheme there are $\kappa=256$ independent component secrets
+In the binary base scheme there are $\kappa=512$ independent component secrets
 \[
- (\mathbf s_0,\ldots,\mathbf s_{255})
-     \in (R_q^n)^{256}.
+ (\mathbf s_0,\ldots,\mathbf s_{511})
+     \in (R_q^n)^{512}.
 \]
-In the $A$-ary scheme there are only $g=\lceil256/\log_2A\rceil$ component
+In the $A$-ary scheme there are only $g=\lceil512/\log_2A\rceil$ component
 secrets,
 \[
  (\mathbf s_0,\ldots,\mathbf s_{g-1})
@@ -730,14 +994,18 @@ key size, and rounding-failure probability.
 
 \section{Conclusion}
 
-Aggregate-only cut-and-choose offers a plausible route around the expensive
-hash-in-ZK issuance proof of BLNS23.  Its useful property is all-or-nothing:
-partial malformed selections remain mixed with at least one honest lane, while
-removing every honest lane costs $2^{-\kappa}$.  This intuition is potentially
-valuable, but it is not yet a theorem.  The next step is to formalize and prove
-the one-honest-lane lemma, or find a related-input counterexample.  Only after
-that step should concrete parameters or performance claims be treated as
-evidence for a deployable scheme.
+The cut-and-choose mechanism detects malformed selections, but analyzing only
+the all-malformed event is insufficient.  Reusable valid inputs give a free
+four-corner forgery, while session freshness still permits a balanced
+malformed-copy splice costing about $2^{\kappa/2}$ classically or
+$2^{\kappa/4}$ under generic quantum search.  The formal half-copy theorem
+shows this cost is optimal for copy-and-combine linear splicing, but it does not
+exclude lattice-specific relations.  Ordinary HMLWE proves aggregate masking
+when all lanes are valid or one fixed lane remains valid throughout; it does
+not cover an adaptively rotating valid majority.  The mfr-AHMLWE assumption,
+simultaneous majority extraction, QROM soundness, malicious-key security, and
+concrete aggregate-noise parameters therefore remain necessary before the
+proposal can support a security claim.
 
 \begin{thebibliography}{9}
 \bibitem{BLNS23}
