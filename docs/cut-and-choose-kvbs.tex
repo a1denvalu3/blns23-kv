@@ -4,6 +4,9 @@
 \usepackage{booktabs}
 \usepackage{hyperref}
 \usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric}
 
 \newtheorem{definition}{Definition}
 \newtheorem{theorem}{Theorem}
@@ -187,6 +190,46 @@ QROM proof is therefore required for the post-quantum parameter choice.  A
 fresh signer nonce limits precomputation, but adds a message unless it is
 already supplied by an authenticated session setup.
 
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  font=\small,
+  node distance=6mm and 10mm,
+  box/.style={draw,rounded corners,align=center,minimum height=9mm,
+              minimum width=28mm,fill=blue!5},
+  hash/.style={draw,diamond,aspect=2,align=center,fill=orange!10},
+  ok/.style={draw,rounded corners,align=center,fill=green!10},
+  keep/.style={draw,rounded corners,align=center,fill=purple!8},
+  arrow/.style={-{Latex[length=2mm]},thick}
+]
+\node[box] (b0) {branch $0$\\$z_{i,0}\mapsto\mathbf c_{i,0}$};
+\node[box,below=of b0] (b1) {branch $1$\\$z_{i,1}\mapsto\mathbf c_{i,1}$};
+\node[hash,right=22mm of $(b0)!0.5!(b1)$] (com) {$C=H_{\rm com}$\\all lanes};
+\node[hash,right=14mm of com] (chal) {$H_{\rm chal}$};
+\node[box,right=of chal] (chi) {$\chi_i=0$};
+\draw[arrow] (b0) -- (com);
+\draw[arrow] (b1) -- (com);
+\draw[arrow] (com) -- (chal);
+\draw[arrow] (chal) -- (chi);
+
+\node[ok,right=13mm of chi,yshift=7mm] (open)
+ {open branch $0$: reveal $z_{i,0}$\\recompute and check $\mathbf c_{i,0}$};
+\node[keep,below=of open] (hidden)
+ {select branch $1$: send $\mathbf c_{i,1}$\\keep $z_{i,1}$ private};
+\draw[arrow] (chi.east) -- ++(5mm,0) |- (open.west);
+\draw[arrow] (chi.east) -- ++(5mm,0) |- (hidden.west);
+\node[draw,dashed,fit=(b0)(b1),inner sep=4mm,
+      label={[font=\small]above:binary lane $i$}] {};
+\end{tikzpicture}%
+}
+\caption{Binary cut-and-choose in one lane, illustrated for $\chi_i=0$.
+The challenged branch is regenerated from its seed and checked; only the
+complementary branch enters the aggregate response.  The roles reverse when
+$\chi_i=1$.}
+\label{fig:binary-lane}
+\end{figure}
+
 \subsection{Aggregate response}
 
 The signer derives a bounded aggregate error deterministically from the entire
@@ -217,6 +260,60 @@ only of $S=\sum_i\mathbf s_i$ is insufficient because the
 $\mathbf c_i^*$ differ.  The important efficiency observation is that
 $\mathcal R_{\mathrm{resp}}$ consists only of lattice-linear relations and
 norm bounds; it contains no hash evaluation.
+
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  font=\small,
+  node distance=7mm and 9mm,
+  input/.style={draw,rounded corners,align=center,fill=purple!8,
+                minimum width=19mm,minimum height=9mm},
+  mult/.style={draw,circle,align=center,fill=blue!6,minimum size=12mm},
+  op/.style={draw,circle,fill=orange!10,minimum size=9mm},
+  result/.style={draw,rounded corners,align=center,fill=green!10,
+                 minimum width=24mm,minimum height=9mm},
+  arrow/.style={-{Latex[length=2mm]},thick}
+]
+\node[input] (c0) {$\mathbf c_0^*$};
+\node[input,right=of c0] (c1) {$\mathbf c_1^*$};
+\node[right=7mm of c1] (dots) {$\cdots$};
+\node[input,right=7mm of dots] (ck) {$\mathbf c_{\kappa-1}^*$};
+
+\node[mult,below=of c0] (m0) {$\mathbf s_0^T$};
+\node[mult,below=of c1] (m1) {$\mathbf s_1^T$};
+\node[mult,below=of ck] (mk) {$\mathbf s_{\kappa-1}^T$};
+\draw[arrow] (c0) -- (m0);
+\draw[arrow] (c1) -- (m1);
+\draw[arrow] (ck) -- (mk);
+
+\node[op,below=16mm of m1] (sum) {$\sum$};
+\draw[arrow] (m0.south) -- ++(0,-6mm) -| (sum.west);
+\draw[arrow] (m1.south) -- (sum.north);
+\draw[arrow] (mk.south) -- ++(0,-6mm) -| (sum.east);
+\node[above=2mm of sum] {$+\,e$};
+\node[result,below=8mm of sum] (h) {$h\in R_q$\\one polynomial};
+\draw[arrow] (sum) -- (h);
+
+\node[result,right=12mm of h] (unblind)
+ {$h-\sum_i\mathbf t_i^T\mathbf r_i^*$};
+\node[result,right=of unblind] (v)
+ {$v=\roundp{\cdot}\in R_p$\\16 bytes};
+\draw[arrow] (h) -- (unblind);
+\draw[arrow] (unblind) -- (v);
+
+\node[draw,dashed,fit=(c0)(c1)(ck)(m0)(m1)(mk)(sum)(h),inner sep=4mm] (signerbox) {};
+\node[font=\small,above=1mm of signerbox.north]
+ {signer: independent component keys, one aggregate output};
+\node[font=\small,above=2mm of unblind] {user};
+\end{tikzpicture}%
+}
+\caption{Aggregate-key evaluation.  Each selected commitment is evaluated
+under an independent component key, but individual lane responses are never
+released.  Summation collapses the vector of evaluations to one polynomial;
+the user then unblinds and rounds it to the compact value $v$.}
+\label{fig:aggregate-flow}
+\end{figure}
 
 \subsection{Unblinding and presentation}
 
