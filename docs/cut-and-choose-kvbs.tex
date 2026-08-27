@@ -102,32 +102,36 @@ It is generally \emph{not} sufficient to retain only
 $\sum_i\mathbf s_i$, because different lanes authenticate different hash
 inputs.
 
-We require a batched lattice NIZK $\Pi_{\mathrm{resp}}$.  The latter contains
-no hash preimage relation.  No additional outer commitment is needed: the
-explicit values $\mathbf c_{i,b}$ are fixed by, and included in, the
-Fiat--Shamir challenge before any branch is opened.
+We require a batched lattice NIZK $\Pi_{\mathrm{resp}}$ and a 384-bit
+collision-resistant hash $H_{\mathrm{com}}$.  The latter gives approximately
+128-bit collision resistance against generic quantum collision search.  The
+NIZK contains no hash preimage relation.
 
 \section{Construction}
 
 \subsection{Commit phase}
 
 The user independently constructs two branches $b\in\{0,1\}$ in each lane
-$i\in\{0,\ldots,\kappa-1\}$.  It samples
+$i\in\{0,\ldots,\kappa-1\}$.  It samples a 32-byte seed $z_{i,b}$ and uses a
+domain-separated XOF and canonical deterministic sampler to derive
 \[
- (\mathbf r_{i,b},\mathbf e_{2,i,b})\sample D_r\times D_e,
- \quad m_{i,b}\sample\mathcal M,
+ (m_{i,b},\mathbf r_{i,b},\mathbf e_{2,i,b})
+ =G(\mathsf{sid},i,b,z_{i,b}),
 \]
-and computes
+where $m_{i,b}$ is 32 bytes and the two vectors have the prescribed bounded
+distributions.  It computes
 \begin{align*}
  \rho_{i,b}&=H_\rho(\mathsf{sid},i,b,
                      \mathbf r_{i,b},\mathbf e_{2,i,b}),\\
  \mathbf u_{i,b}&=H_R(\mathsf{credential\mbox{-}lane},i,m_{i,b},\rho_{i,b}),\\
  \mathbf c_{i,b}&=B_i\mathbf r_{i,b}+\mathbf e_{2,i,b}
-                   +\mathbf u_{i,b}.
+                   +\mathbf u_{i,b},\\
+ D_{i,b}&=H_{\mathrm{com}}(\mathsf{protocol},\mathsf{issuer},\mathsf{pk},
+              \mathsf{sid},i,b,\mathsf{Encode}(\mathbf c_{i,b})).
 \end{align*}
 The session identifier $\mathsf{sid}$ includes the protocol version, issuer,
-key epoch, and fresh contributions from both parties.  The user sends all
-$2\kappa$ values $\mathbf c_{i,b}$.
+key epoch, and fresh contributions from both parties.  The short digests
+$D_{i,b}$ commit to all $2\kappa$ branches before challenge selection.
 
 \subsection{Fiat--Shamir challenge and opening}
 
@@ -135,27 +139,33 @@ After all commitments are fixed, the user derives
 \[
  \boldsymbol\chi=(\chi_0,\ldots,\chi_{\kappa-1})
  =H_{\mathrm{chal}}(\mathsf{protocol},\mathsf{issuer},\mathsf{pk},
-   \mathsf{sid},\{\mathbf c_{i,b}\}_{i,b})
+   \mathsf{sid},\{D_{i,b}\}_{i,b})
  \in\{0,1\}^{\kappa}.
 \]
-For every lane, the user opens branch $\chi_i$ by disclosing
-\[
- (m_{i,\chi_i},\rho_{i,\chi_i},\mathbf r_{i,\chi_i},
-   \mathbf e_{2,i,\chi_i}).
-\]
-The user's first message contains all branch commitments, the challenge, and
-these openings.  The signer recomputes the challenge and checks both hash
-computations, the linear relation, all norm bounds, canonical
-encodings, and domain separators.  It aborts without producing any
+For every lane, the user opens branch $\chi_i$ by disclosing only the seed
+$z_{i,\chi_i}$, and sends the full vector $\mathbf c_{i,1-\chi_i}$ for the
+complementary branch.  The signer expands every disclosed seed, recomputes the
+opened $\mathbf c_{i,\chi_i}$ and its digest, and verifies the digest of every
+full complementary vector.  It also checks both hash computations, the linear
+relation, all norm bounds, canonical encodings, and domain separators for every
+opened branch.  It aborts without producing any
 secret-dependent output if any check fails.  Define the selected branch
 $b_i^*=1-\chi_i$ and abbreviate
 $\mathbf c_i^*=\mathbf c_{i,b_i^*}$.
 
+The selected seeds are retained privately by the user.  At presentation the
+user reveals only $(m_i^*,\rho_i^*)$, never $z_{i,b_i^*}$: revealing a selected
+seed would let the issuer reconstruct $\mathbf r_i^*,\mathbf e_{2,i}^*$ and
+link the presented credential to its issuance commitment exactly.  The XOF,
+rejection-sampling order, byte encoding, and maximum iteration policy are part
+of the protocol specification so that seed expansion is deterministic and
+cross-platform reproducible.
+
 Thus issuance has the two-message form
 \[
  \mathsf{User}\longrightarrow\mathsf{Signer}:
- \{\mathbf c_{i,b}\}_{i,b},\boldsymbol\chi,
- \{\mathsf{open}_{i,\chi_i}\}_i,
+ \{D_{i,b}\}_{i,b},
+ \{z_{i,\chi_i},\mathbf c_{i,1-\chi_i}\}_i,
  \qquad
  \mathsf{Signer}\longrightarrow\mathsf{User}:h,\pi_{\mathrm{resp}}.
 \]
@@ -327,7 +337,8 @@ $(m_j^*,\rho_j^*,\mathbf r_j^*,\mathbf e_{2,j}^*)$, the witness required by
 the HMLWE reduction.
 
 \begin{lemma}[Two-fork selected-lane extraction]
-Two accepting transcripts with identical pair commitments and distinct
+Assuming binding of the branch digests, two accepting transcripts with
+identical pair commitments and distinct
 challenge vectors reveal a valid witness for at least one branch selected in
 the first transcript (and symmetrically for one branch selected in the
 second).
@@ -446,7 +457,7 @@ used for selective-failure tagging.
 \section{Preliminary efficiency discussion}
 
 The candidate removes the hash-heavy user NIZK, replacing it with
-$2\kappa$ commitment constructions and $\kappa$ explicit openings.  For a
+$2\kappa$ hash commitments and $\kappa$ seeded openings.  For a
 classical target with $\kappa=128$, issuance sends 256 lattice commitments and
 opens 128 witnesses; the conservative post-quantum starting point doubles
 those figures.  Fiat--Shamir preserves two-message issuance despite this
@@ -461,25 +472,21 @@ We instantiate the wire calculation with the BLNS23 keyed-verification values
 $d=64$, $n=93$, $\lceil\log_2q\rceil=152$, $p=4$, and 32-byte messages and
 tags.  We take $\kappa=256$ as the conservative starting point for 128-bit
 post-quantum Fiat--Shamir grinding resistance.  Ring elements are packed at
-152 bits per coefficient.  Since the global norm bound is $\beta_s=78$, every
-coefficient of $\mathbf r$ and $\mathbf e_2$ lies in $[-78,78]$ and has a
-canonical signed one-byte encoding; a decoder rejects all noncanonical or
-out-of-range values.
+152 bits per coefficient.  Branch openings are 32-byte seeds and branch
+commitments are 48-byte digests.
 
 One commitment vector has exact packed length
 \[
  |\mathbf c|=nd\lceil\log_2q\rceil
  =93\cdot64\cdot152=904{,}704\text{ bits}=113{,}088\text{ bytes}.
 \]
-The $2\kappa=512$ commitment vectors therefore occupy 57,901,056 bytes.
-One opening contains two short vectors, one 32-byte message, and one 32-byte
-tag:
-\[
- |\mathsf{open}|=2nd+32+32=11{,}968\text{ bytes}.
-\]
-The 256 openings occupy 3,063,808 bytes.  With a 32-byte session identifier,
-the exact fixed portion of the first message is therefore 60,964,896 bytes
-(58.14 MiB).  The challenge is recomputed and is not transmitted separately.
+Only the $\kappa=256$ unopened vectors are transmitted in full, occupying
+28,950,528 bytes.  The 512 branch digests occupy 24,576 bytes and the 256
+opened seeds occupy 8,192 bytes.  With a 32-byte session identifier, the exact
+fixed portion of the first message is therefore 28,983,328 bytes (27.64 MiB).
+The challenge is recomputed and is not transmitted separately.  Relative to
+transmitting all commitment vectors and explicit witnesses, seeded openings
+reduce the first message by approximately 52.5\%.
 
 The aggregate response $h\in R_q$ occupies
 \[
@@ -496,17 +503,19 @@ cannot be inferred from the asymptotic construction.
 \toprule
 Wire component & Bytes \\
 \midrule
-512 commitment vectors & 57,901,056 \\
-256 opened witnesses & 3,063,808 \\
+256 unopened commitment vectors & 28,950,528 \\
+512 48-byte branch digests & 24,576 \\
+256 32-byte opened seeds & 8,192 \\
 Session identifier & 32 \\
-User $\rightarrow$ signer, fixed total & 60,964,896 \\
+User $\rightarrow$ signer, fixed total & 28,983,328 \\
 Aggregate $h$ & 1,216 \\
 Signer $\rightarrow$ user & $1,216+|\pi_{\mathrm{resp}}|$ \\
 MAC $(\rho_0,\ldots,\rho_{255},v)$ & 8,208 \\
 MAC plus 256 32-byte messages & 16,400 \\
 \bottomrule
 \end{tabular}
-\caption{Preliminary exact wire sizes under the stated canonical encoding.
+\caption{Preliminary exact wire sizes with seeded openings and 384-bit branch
+commitments under the stated canonical encoding.
 The batched response proof is not yet instantiated.}
 \label{tab:wire-size}
 \end{table}
