@@ -52,8 +52,10 @@ related-input distinguisher cancels every keyed term while leaving only small
 noise.  Positively, an interactive variant with extractable seed tags,
 scheduled growing arity, a signer-sampled post-commitment challenge, and a
 common hidden-message commitment does reduce to ordinary HMLWE; the same proof
-fails under Fiat--Shamir grinding.  We also give a protocol-level balanced
-splicing attack costing
+fails under Fiat--Shamir grinding.  Polynomially many Fiat--Shamir trials can
+cover every lane with a selected malformed branch, while granting the
+reduction polynomial chosen-input leakage is itself insecure.  We also give a
+protocol-level balanced splicing attack costing
 $2^{\kappa/2}$ classically (or $2^{\kappa/4}$ with generic quantum search), so
 the construction remains unproven from standard MLWE and needs larger
 cut-and-choose parameters than the all-malformed analysis suggests.
@@ -925,6 +927,108 @@ into super-polynomial arity, or a separate unbiasable hidden-selection
 primitive.  The first option adds a challenge/opening round; the second is
 impractical; the third is an additional cryptographic mechanism.
 
+\subsection{Why chosen-input leakage does not rescue Fiat--Shamir}
+
+One might try to extend the fixed-lane reduction with an oracle that answers a
+bounded number of malformed coefficients under the embedded secret.  The
+Fiat--Shamir protocol permits enough such events to defeat this proof strategy.
+
+\begin{lemma}[Polynomial lane coverage]
+For arity $A$ and $g$ component keys, a classical user can produce accepted,
+session-fresh transcripts in which every component is selected malformed at
+least once using at most
+\[
+ q_{\mathrm{chal}}
+ =g\left\lceil A\bigl(\lambda\ln2+\ln g\bigr)\right\rceil
+\]
+Fiat--Shamir trials, except with probability $2^{-\lambda}$.  Every submitted
+transcript needs only one malformed component.
+\end{lemma}
+
+\begin{proof}
+For component $i$, prepare one malformed branch and $A-1$ openable branches;
+make every branch openable in all other components.  A candidate digest is
+accepted with the malformed branch selected in component $i$ with probability
+$1/A$.  After $L$ independent candidates, failure for that component is at
+most
+\[
+ (1-1/A)^L\leq e^{-L/A}.
+\]
+Set $L=\lceil A(\lambda\ln2+\ln g)\rceil$ and apply a union bound over the $g$
+components.  Only the successful candidate for each component is submitted to
+the signer, so signer-side commitment replay checks do not observe the
+discarded trials.
+\end{proof}
+
+For binary lanes, coverage therefore costs only polynomial work (about
+$2g$ trials in expectation, or the displayed larger bound for
+$2^{-\lambda}$ failure).  This is not a forgery: the honest components still
+mask each response.  It does show that a reduction cannot choose one embedded
+lane and assume that it remains hash-derived throughout all polynomially many
+issuances.
+
+The natural oracle extension is itself false for polynomial leakage.  Define
+$\ell$-chosen-input HMLWE as ordinary HMLWE augmented in both the real and
+ideal experiments by at most $\ell$ queries
+\[
+ \mathcal L_{\mathbf s}(\mathbf a,\nu)
+   =\mathbf s^T\mathbf a+e_\nu,
+ \qquad e_\nu\sample D_E,
+\]
+where labels $\nu$ are fresh.  Only the hashed oracle is switched from real to
+uniform between the experiments.  Such a leakage oracle would let a reduction
+answer a malformed embedded coefficient without pretending that the
+coefficient is a random-oracle image.
+
+\begin{theorem}[Polynomial chosen-input HMLWE is false]
+Suppose every coefficient of an independent $e\sample D_E$ has mean zero and
+lies in $[-B,B]$, the secret coefficients are integral with centered magnitude
+at most $\beta_s$, and $\beta_s+B<q/2$.  For
+\[
+ T\geq8B^2\ln(2nd/\epsilon),
+ \qquad \ell=nT,
+\]
+there is an $\ell$-query adversary that recovers
+$\mathbf s\in R_q^n$ with probability at least $1-\epsilon$ and then
+distinguishes the hashed oracle with overwhelming advantage.
+\end{theorem}
+
+\begin{proof}
+For each module coordinate $j\in[n]$, query the ring-unit vector
+$\mathbf e_j$ under $T$ fresh labels.  The answers are
+\[
+ y_{j,t}=s_j+e_{j,t}.
+\]
+Center the coefficients modulo $q$, average the $T$ answers coefficientwise,
+and round to the nearest integer.  Hoeffding's inequality gives
+\[
+ \Pr\!\left[
+   \left|T^{-1}\sum_t e_{j,t}[k]\right|\geq\tfrac12
+ \right]
+ \leq2e^{-T/(8B^2)}.
+\]
+A union bound over the $nd$ secret coefficients proves recovery with the
+stated probability.  The adversary then makes a fresh hashed query, subtracts
+the now-known inner product, and tests whether the residual is short.  It is
+distributed as $D_E$ in the real experiment and is uniform in the ideal
+experiment.
+\end{proof}
+
+With the illustrative BLNS23 values $B=8$, $n=93$, $d=64$, and
+$\epsilon=2^{-128}$, the conservative Hoeffding bound gives
+$T=47{,}910$ repetitions per module coordinate and about $4.46$ million
+chosen queries in total.  The exact attack is likely cheaper for a concrete
+Gaussian error distribution, but the polynomial upper bound is what matters
+asymptotically.
+
+This theorem does not attack the aggregate protocol: its user receives only
+the sum of all component evaluations, not $\mathcal L_{\mathbf s_i}$ for an
+isolated component.  It instead rules out the most direct black-box repair of
+the ordinary-HMLWE reduction.  A proof of the Fiat--Shamir construction must
+exploit the aggregate masking jointly; granting the simulator separate
+chosen-input leakage under each lane key is both stronger than the protocol
+and asymptotically insecure.
+
 \section{Cut-and-choose analysis}
 
 Call a branch \emph{openable} if its disclosed witness passes every opening
@@ -1086,7 +1190,9 @@ used for selective-failure tagging.
 response-only tc-AHMLWE and its equality-verification one-more companion for
 the Fiat--Shamir protocol.  Section~\ref{sec:unpredictable-repair} proves the
 corresponding aggregate reduction only with an unpredictable signer challenge;
-Fiat--Shamir grinding invalidates its untouched-component lemma.
+Fiat--Shamir grinding invalidates its untouched-component lemma, and
+polynomial chosen-input leakage under the embedded key is not a sound
+replacement.
  \item \textbf{Global lane freshness.} Enforce non-repeating session
 identifiers across concurrency, crashes, rollback, and distributed signer
 replicas, and bind $\rho$ to that identifier as in the construction above.
@@ -1306,7 +1412,10 @@ separable verifier.  A positive standard-HMLWE theorem is available after
 adding extractable seed tags, a common hidden-message commitment, scheduled
 growing arity, and an unpredictable signer challenge.  Its untouched-component
 proof fails for Fiat--Shamir because polynomially many discarded digests can
-target every component.  Thus the present evidence identifies a sharp
+target every component.  A lane-by-lane reduction cannot simply request the
+missing malformed evaluations: polynomial chosen-input HMLWE permits
+basis-query averaging and secret recovery.  Thus the present evidence
+identifies a sharp
 tradeoff: the aggregate construction can be proved from ordinary HMLWE in the
 more interactive variant, while the two-message version still needs the new
 tc-OMHLF assumption or a different hidden-selection mechanism.
