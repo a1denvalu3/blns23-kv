@@ -539,7 +539,12 @@ $d\log_2p=128$ bits for $v$:
 If the messages are considered part of the stored credential rather than
 external signed data, 8,192 additional bytes give a 16,400-byte credential.
 
-\subsection{Higher-arity cut-and-choose}
+\subsection{Optional optimization: higher-arity cut-and-choose}
+
+The binary construction above is the base scheme: it gives the simplest
+protocol description, two-fork extractor, and security game.  Higher arity is
+an optional optimization and should be analyzed only after the binary scheme
+is proved secure.
 
 The dominant term can be reduced by replacing binary pairs with groups of
 $A=2^a$ branches.  Fiat--Shamir selects one branch per group to remain
@@ -597,6 +602,28 @@ The two-fork extraction argument generalizes: two accepting transcripts whose
 selected indices differ in some group cause the second transcript to open the
 branch selected in the first.  The proof must use an $A$-ary challenge and bind
 all branches in the global commitment.
+
+This optimization changes the key shape and is not merely a wire encoding.
+In the binary base scheme there are $\kappa=256$ independent component secrets
+\[
+ (\mathbf s_0,\ldots,\mathbf s_{255})
+     \in (R_q^n)^{256}.
+\]
+In the $A$-ary scheme there are only $g=\lceil256/\log_2A\rceil$ component
+secrets,
+\[
+ (\mathbf s_0,\ldots,\mathbf s_{g-1})
+     \in (R_q^n)^g,
+ \qquad
+ h=\sum_{i=0}^{g-1}\mathbf s_i^T\mathbf c_i^*+e.
+\]
+Thus arity changes the public and secret key sizes, the number of terms and
+noise contributions in the aggregate, the batched response-proof statement,
+and the number of $(m_i,\rho_i)$ pairs in the MAC.  Each component key retains
+the full BLNS23 module dimension; only the number of independently keyed
+groups changes.  A concrete $A$ must therefore receive its own correctness,
+hardness, and parameter analysis rather than inheriting the binary parameters
+automatically.
 
 The credential contains $\kappa$ message/tag pairs unless they admit a safe
 compression mechanism.  This is a major cost and must be included in any
