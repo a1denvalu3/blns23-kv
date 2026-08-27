@@ -766,6 +766,73 @@ hashed inputs.  The closed-cycle attack shows that granting all such final
 tuples at once is too strong, while the protocol-specific causal restriction
 is not captured by standard HMLWE.
 
+\subsection{Conditional-entropy barrier to a joint MLWE reduction}
+
+It is tempting to concatenate the component secrets as
+$\mathbf S=(\mathbf s_0,\ldots,\mathbf s_{g-1})$ and regard a response as the
+single MLWE sample
+\[
+ z_j=\mathbf S^T\mathbf A_j+e_j,
+ \qquad
+ \mathbf A_j=(\mathbf a_{j,0,1-\chi_{j,0}},\ldots,
+                    \mathbf a_{j,g-1,1-\chi_{j,g-1}}).
+\]
+This algebraic rewriting is exact, but the distribution of $\mathbf A_j$ is
+not the coefficient distribution in ordinary MLWE.  The following elementary
+calculation isolates the obstruction.
+
+\begin{lemma}[Post-commitment support bound]
+Fix the complete table of two branch coefficients in each of $g$ components,
+the session data, and the binding digest.  Over the remaining random-oracle
+challenge, the selected concatenated coefficient $\mathbf A_j\in
+(R_q^n)^g$ has support of size at most $2^g$.  Hence, writing $d$ for the
+ring degree and $U$ for the uniform distribution on $(R_q^n)^g$, for every
+$\alpha>1$ its exponentiated R\'enyi divergence satisfies
+\[
+ R_\alpha(\mathsf{Law}(\mathbf A_j\mid\mathsf{table})\Vert U)
+ \geq \frac{q^{dng}}{2^g}.
+\]
+The conditional min-entropy is at most $g$ bits.
+\end{lemma}
+
+\begin{proof}
+Every challenge vector in $\{0,1\}^g$ selects one tuple from the fixed table,
+so the support bound is immediate.  For a distribution $P$ with support size
+at most $N$ on a universe of size $M$, convexity gives
+$\sum_xP(x)^\alpha\geq N^{1-\alpha}$.  Therefore
+\[
+ R_\alpha(P\Vert U)
+ =M\left(\sum_xP(x)^\alpha\right)^{1/(\alpha-1)}
+ \geq M/N.
+\]
+Substitute $M=|(R_q^n)^g|=q^{dng}$ and $N=2^g$.
+\end{proof}
+
+Bai et al.~\cite{BLLSS15} prove hardness for non-uniform and even correlated
+LWE coefficient rows when their joint distribution has sufficiently small
+R\'enyi divergence from uniform.  Applied after the branch table is exposed,
+their reduction loses a factor at least $q^{dng}/2^g$ already for one row and
+is vacuous here.  Entropic M-LWE results such as~\cite{Boudgoust22} concern
+entropy in the \emph{secret} distribution and search M-LWE; they do not turn a
+challenge selector with $g$ conditional bits into a uniform coefficient row.
+There is precedent for stopping at an explicit related-samples assumption:
+Banerjee, Peikert, and Rosen~\cite{BPR12} introduced an interactive
+related-samples LWE/LWR assumption when adversarial relations among sample
+vectors fell outside their standard-LWE proof.  Their relations are
+subset-products rather than cut-and-choose tables, so their assumption does
+not imply tc-AHMLWE; the comparison clarifies the status of tc-AHMLWE as a new
+related-samples assumption rather than a renamed standard MLWE instance.
+
+This lemma is only a reduction barrier, not an attack.  In particular it also
+holds for an all-honest branch table, while the all-honest case is proved above
+by embedding one HMLWE lane.  Equivalently, a simulator can sometimes sample
+the public table \emph{around} an externally supplied uniform coefficient and
+program the random-oracle challenge.  The missing theorem must show how to do
+that when malformed branches were chosen adaptively as functions of both
+preobserved alternatives and earlier transcripts.  Merely conditioning on the
+table and invoking non-uniform LWE, or merely observing high unconditional
+entropy before the table is revealed, does not establish tc-AHMLWE.
+
 \subsection{Why Subspace LWE does not directly close the gap}
 
 Subspace LWE~\cite{Pietrzak12} is a tempting candidate because it permits
@@ -1192,7 +1259,9 @@ the Fiat--Shamir protocol.  Section~\ref{sec:unpredictable-repair} proves the
 corresponding aggregate reduction only with an unpredictable signer challenge;
 Fiat--Shamir grinding invalidates its untouched-component lemma, and
 polynomial chosen-input leakage under the embedded key is not a sound
-replacement.
+replacement.  A joint concatenated-secret proof must additionally simulate
+adaptive malformed branch tables around its challenge rows; direct
+non-uniform-LWE arguments are vacuous after conditioning on those tables.
  \item \textbf{Global lane freshness.} Enforce non-repeating session
 identifiers across concurrency, crashes, rollback, and distributed signer
 replicas, and bind $\rho$ to that identifier as in the construction above.
@@ -1439,6 +1508,25 @@ K.~Pietrzak.
 \newblock Subspace LWE.
 \newblock In \emph{TCC 2012}, LNCS 7194, pp.~548--563, 2012.
 \newblock \url{https://www.iacr.org/archive/tcc2012/71940166/71940166.pdf}.
+
+\bibitem{BLLSS15}
+S.~Bai, A.~Langlois, T.~Lepoint, D.~Stehl\'e, and R.~Steinfeld.
+\newblock Improved Security Proofs in Lattice-Based Cryptography: Using the
+R\'enyi Divergence Rather Than the Statistical Distance.
+\newblock In \emph{ASIACRYPT 2015}, LNCS 9452, pp.~3--24, 2015.
+\newblock \url{https://www.iacr.org/archive/asiacrypt2015/94520196/94520196.pdf}.
+
+\bibitem{Boudgoust22}
+K.~Boudgoust, C.~Jeudy, A.~Roux-Langlois, and W.~Stehl\'e.
+\newblock Entropic Hardness of Module-LWE from Module-NTRU.
+\newblock IACR Cryptology ePrint Archive, Report 2022/245, 2022.
+\newblock \url{https://eprint.iacr.org/2022/245}.
+
+\bibitem{BPR12}
+A.~Banerjee, C.~Peikert, and A.~Rosen.
+\newblock Pseudorandom Functions and Lattices.
+\newblock In \emph{EUROCRYPT 2012}, LNCS 7237, pp.~719--737, 2012.
+\newblock \url{https://www.iacr.org/archive/eurocrypt2012/72370713/72370713.pdf}.
 
 \bibitem{BS22}
 W.~Beullens and G.~Seiler.
