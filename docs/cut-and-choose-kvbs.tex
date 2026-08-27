@@ -45,10 +45,11 @@ conditional security argument.  The central unresolved question is a robust
 identify a four-corner linear splicing attack whenever valid lane inputs can be
 reused across issuance sessions.  The current construction attempts to exclude
 that attack by deriving every $\rho$ from a unique session identifier.  We
-formalize the remaining requirement as majority-fresh aggregate HMLWE
+formalize a natural candidate, majority-fresh aggregate HMLWE,
 and prove reductions to ordinary HMLWE in two important special cases.  The
-fully adaptive, rotating-majority case required by the construction remains a
-new assumption.  We also give a balanced splicing attack costing
+fully adaptive, rotating-majority assumption is false as stated: a closed-cycle
+related-input distinguisher cancels every keyed term while leaving only small
+noise.  We also give a protocol-level balanced splicing attack costing
 $2^{\kappa/2}$ classically (or $2^{\kappa/4}$ with generic quantum search), so
 the construction remains unproven from standard MLWE and needs larger
 cut-and-choose parameters than the all-malformed analysis suggests.
@@ -58,8 +59,10 @@ cut-and-choose parameters than the all-malformed analysis suggests.
 \fbox{\parbox{0.92\linewidth}{\textbf{Security status.}
 The construction is unproven.  Section~\ref{sec:rectangle} gives a free break
 if valid lane inputs are reusable and a balanced malformed-copy splice even
-with session freshness.  It must not be implemented as a secure credential
-scheme without a full aggregate-HMLWE reduction and revised parameters.}}
+with session freshness.  Section~\ref{sec:fr-ahmlwe} refutes the proposed
+adaptive aggregate-HMLWE assumption.  It must not be implemented as a secure
+credential scheme without a different, transcript-causal reduction and revised
+parameters.}}
 \end{center}
 
 \section{Introduction}
@@ -514,7 +517,8 @@ With session-bound validity, such copied atoms must occur in unopened malformed
 branches except with a hash collision.  Thus every formal linear splice fixes
 at least $\kappa/2$ challenge bits in one issuance.  This theorem does not rule
 out lattice-specific attacks using short nontrivial relations among distinct
-hash vectors; excluding those is part of the mfr-AHMLWE assumption.
+hash vectors.  The closed-cycle attack below refutes mfr-AHMLWE even without
+such lattice-specific relations.
 
 \section{Majority-fresh aggregate HMLWE}\label{sec:fr-ahmlwe}
 
@@ -558,9 +562,69 @@ claimed concrete security.  The definition does not
 restrict an arbitrary malformed coordinate from repeating a previous ring
 element; that behavior is deliberately included in the assumption.
 
+That last freedom makes the assumption false.  The following attack does not
+reuse a valid hash input and does not depend on the secret keys.
+
+\begin{theorem}[Closed-cycle distinguisher]
+Suppose $D_E$ is supported, except with probability $\delta_E$, on a centered
+set $\mathcal E\subset R_q$ such that the three-fold sumset
+$3\mathcal E=\mathcal E+\mathcal E+\mathcal E$ occupies a negligible fraction
+of $R_q$.  Then majority-fresh aggregate HMLWE is distinguishable with
+advantage at least
+\[
+ 1-3\delta_E-\frac{|3\mathcal E|}{|R_q|}.
+\]
+More generally, every fixed validity threshold $\tau<1$ is vulnerable using a
+constant number of aggregate queries.
+\end{theorem}
+
+\begin{proof}
+For the majority case (and the cryptographic regime $\kappa\geq5$), partition
+the lanes into three sets
+$P_1\mathbin{\dot\cup}P_2\mathbin{\dot\cup}P_3=[\kappa]$ of nearly equal
+size.  Before making any aggregate query, query the random oracles on fresh
+messages and obtain $a_{j,i}=G_i(\mu_{j,i})$ for every $i\notin P_j$.  For the
+malformed coordinates $i\in P_j$, set
+\[
+ a_{j,i}=-\sum_{\ell\ne j}a_{\ell,i}.
+\]
+This is well defined because lane $i\in P_j$ is valid in the other two
+queries, whose random-oracle values are already known.  Query $j$ uses
+$V_j=[\kappa]\setminus P_j$, so more than half its coordinates are valid and
+every marked message is fresh.  Nevertheless, for every lane $i$,
+\[
+ a_{1,i}+a_{2,i}+a_{3,i}=0.
+\]
+Thus the sum of the three real answers is merely $e_1+e_2+e_3\in3\mathcal E$
+except with probability at most $3\delta_E$.  The sum of three independent
+ideal answers is uniform in $R_q$.  Testing membership in $3\mathcal E$ gives
+the claimed advantage.
+
+For a fixed threshold $\tau<1$, choose a constant
+$Q>1/(1-\tau)$ and sufficiently large $\kappa$, partition the lanes into $Q$
+nearly equal sets, and perform the same construction with
+$a_{j,i}=-\sum_{\ell\ne j}a_{\ell,i}$ for $i\in P_j$.  Each query has valid
+fraction at least $1-\lceil\kappa/Q\rceil/\kappa>\tau$, while the sum of all
+$Q$ keyed terms is
+zero.  The same small-sum test distinguishes, assuming the $Q$-fold aggregate
+error remains concentrated in a negligible fraction of $R_q$.
+\end{proof}
+
+The theorem refutes mfr-AHMLWE as defined; it is not merely a missing reduction
+to ordinary MLWE.  It does \emph{not} immediately give a protocol attack.  In
+the protocol, every pair commitment is fixed before Fiat--Shamir chooses which
+honest branch remains unopened.  The abstract game instead lets the adversary
+prequery the hashes and directly submit the final selected coefficient tuple.
+Any replacement assumption must preserve this commit--challenge--open causal
+order, bind both branches globally, and include the one-more verification
+target.  Calling such a transcript-aware game ``aggregate HMLWE'' would be a
+new protocol-specific assumption rather than the simple oracle assumption
+above.
+
 \begin{lemma}[Fixed honest lane special case]
 Suppose there is an index $i^*$ such that $i^*\in V_j$ in every aggregate
-query.  Then mfr-AHMLWE reduces to ordinary HMLWE for lane $i^*$, with a factor
+query.  Then the fixed-lane restriction of the aggregate game reduces to
+ordinary HMLWE for lane $i^*$, with a factor
 at most $\kappa$ if the reduction must guess $i^*$.
 \end{lemma}
 
@@ -580,7 +644,7 @@ secrets were sampled by the reduction.
 \end{proof}
 
 \begin{corollary}[All lanes valid]
-If $V_j=[\kappa]$ in every query, mfr-AHMLWE reduces to ordinary HMLWE (and
+If $V_j=[\kappa]$ in every query, the aggregate game reduces to ordinary HMLWE (and
 hence, in the random-oracle model, to MLWE by BLNS23 Lemma~4.3).
 \end{corollary}
 
@@ -591,51 +655,13 @@ random oracle: the adversary may query the component random oracles separately
 before deciding which values to combine.
 \end{proof}
 
-Neither lemma proves the general game.  Majority sets intersect pairwise, but
-polynomially many majority sets need not have a common element.  Thus one may
-still have no lane valid in every query.  A reduction
-that embeds its unknown HMLWE secret in lane $i$ must then answer queries in
-which $i\notin V_j$ and $\mathbf a_{j,i}$ is adversarially chosen.  Doing so
-requires the unavailable value $\mathbf s_i^T\mathbf a_{j,i}$; an ordinary
-HMLWE oracle only evaluates fresh hashed inputs.  Guessing the lane or signing
-query does not supply these missing evaluations.  Thus the standard BLNS23
-reduction proves the two lemmas above but not the adaptive rotating-cover case.
-We make the rotating-majority case an explicit assumption rather than silently
-treating it as a consequence of MLWE.
-
-\begin{theorem}[Conditional adaptive aggregate masking]
-Assume binding of the global commitment, simultaneous extraction of every
-valid selected branch needed to identify $V_j$, the BLNS23 hybrids mapping
-valid lane residuals to $G_i(\mu)$ with
-aggregate error $D_E$, and mfr-AHMLWE.  For a classical adversary making at
-most $q_H$ Fiat--Shamir trials, all accepted aggregate responses may be
-replaced by independent uniform ring elements with distinguishing loss at most
-\[
- \operatorname{Adv}_{\mathrm{mfr\text{-}AHMLWE}}
- +q_H2^{-\kappa/2}+\varepsilon_{\mathrm{ext}}
- +\varepsilon_{\mathrm{hyb}},
-\]
-where $\varepsilon_{\mathrm{ext}}$ and $\varepsilon_{\mathrm{hyb}}$ are the
-extraction and BLNS23-hybrid failure probabilities.  In the QROM, the generic
-challenge-search term becomes $O(q_H^2 2^{-\kappa/2})$, in addition to the
-losses of the required QROM extractor.
-\end{theorem}
-
-\begin{proof}
-Except with extraction failure, let $V_j$ contain all valid selected branches.
-If $|V_j|\leq\kappa/2$, at least $\kappa/2$
-selected branches are malformed.  For a fixed committed branch vector,
-acceptance then fixes at least $\kappa/2$ independent challenge bits.  A union
-bound over classical Fiat--Shamir trials gives $q_H2^{-\kappa/2}$; generic
-quantum search gives the stated quadratic-query bound.  Conditioned on the
-complementary event, every accepted query satisfies $|V_j|>\kappa/2$.
-Session-bound $\rho$ values make its valid lane messages fresh except with a
-hash collision.  After the stipulated BLNS23 hybrids, the simulator submits
-the extracted $V_j$, valid messages, and arbitrary remaining residuals to its
-mfr-AHMLWE oracle.  The real oracle reproduces the aggregate response; the
-ideal oracle supplies the uniform replacement.  Adding the bad-event and
-hybrid losses proves the claim.
-\end{proof}
+Outside the fixed-lane cases, a reduction that embeds its unknown HMLWE secret
+in lane $i$ must answer queries in which $i\notin V_j$ and
+$\mathbf a_{j,i}$ is adversarially chosen.  This requires the unavailable value
+$\mathbf s_i^T\mathbf a_{j,i}$; an ordinary HMLWE oracle only evaluates fresh
+hashed inputs.  The closed-cycle attack shows that granting all such final
+tuples at once is too strong, while the protocol-specific causal restriction
+is not captured by standard HMLWE.
 
 \section{Cut-and-choose analysis}
 
@@ -665,7 +691,7 @@ the aggregate and is intended to computationally mask the malformed terms.
 This last sentence is an assumption to be proved, not a consequence of the
 elementary probability calculation.
 
-\subsection{Extraction needed by the majority-fresh game}
+\subsection{Extraction needed by a transcript-causal game}
 
 The desired statement can be separated into an information-selection claim
 and a lattice-pseudorandomness claim.  Let
@@ -685,7 +711,7 @@ For one isolated issuance, knowledge of one valid selected witness is enough
 to invoke an HMLWE mask after sampling every other lane key locally.  Across
 adaptive issuances this argument is sound only if the same embedded lane stays
 valid, as proved in Section~\ref{sec:fr-ahmlwe}.  It does not establish the
-rotating-majority game: when the embedded lane is malformed, the simulator is
+rotating-lane case: when the embedded lane is malformed, the simulator is
 asked for an arbitrary inner product under an unknown secret.
 
 The classical extraction step has a direct two-fork argument.  Fix the user's
@@ -710,9 +736,9 @@ second).
 \end{lemma}
 
 The proof is the coordinate argument above and is information theoretic, but
-it extracts only one selected branch.  The conditional theorem in
-Section~\ref{sec:fr-ahmlwe} needs the witnesses of a strict majority of selected
-branches.  Repeating the fork does not automatically provide them: accepting
+it extracts only one selected branch.  A prospective transcript-causal proof
+may need witnesses across many selected branches.  Repeating the fork does not
+automatically provide them: accepting
 challenges can differ repeatedly in the same small set of coordinates.  A
 multi-fork extractor must either force sufficiently broad challenge coverage
 or use an independently extractable branch commitment.
@@ -723,8 +749,9 @@ success probability is $2^{-\kappa}$.  If a classical polynomial-time prover
 succeeds with non-negligible probability, the standard forking strategy---rewind
 at the challenge query and answer it independently---obtains two distinct
 accepting challenges with non-negligible probability, subject to the usual
-forking loss in the number of random-oracle queries.  Combining this extractor
-with the preceding HMLWE hybrid gives a plausible classical-ROM proof route.
+forking loss in the number of random-oracle queries.  This supplies the
+single-lane witness used by the fixed-lane HMLWE lemma, but it does not repair
+the false adaptive aggregate game or provide a multi-query reduction.
 
 What remains unresolved is making the extractor online and adaptive for
 polynomially many signing queries and concurrent sessions, and then lifting it
@@ -759,13 +786,13 @@ only approximately 32 bits of generic quantum work.
  malformed lane again becomes a probability-$1/2$ key-leakage oracle.
 \end{enumerate}
 
-The unrestricted ``one-honest-lane aggregate security'' conjecture, which
-allows reuse of a valid lane input, is false by Section~\ref{sec:rectangle}.
-For globally fresh valid inputs, Section~\ref{sec:fr-ahmlwe} proves the
-all-lanes-valid and fixed-honest-lane cases from ordinary HMLWE.  Security with
-an adaptively rotating majority of valid lanes is exactly the remaining
-mfr-AHMLWE
-assumption; no reduction to ordinary MLWE is presently claimed.
+The unrestricted ``one-honest-lane aggregate security'' conjecture is false.
+Section~\ref{sec:rectangle} gives the reusable-input and balanced protocol
+splices.  Section~\ref{sec:fr-ahmlwe} gives a closed-cycle distinguisher against
+the proposed majority-fresh oracle game, even though all marked valid inputs
+are fresh.  Only the all-lanes-valid and fixed-honest-lane restrictions reduce
+to ordinary HMLWE.  Any remaining proof must retain the protocol's
+commit--challenge--open order rather than granting arbitrary final tuples.
 
 \section{Blindness intuition}
 
@@ -793,10 +820,11 @@ used for selective-failure tagging.
 \section{Requirements for a full proof}\label{sec:open}
 
 \begin{enumerate}
- \item \textbf{Fresh aggregate pseudorandomness.} Prove mfr-AHMLWE from a
-standard lattice assumption, or state and cryptanalyze it as a new assumption.
-The proof must permit arbitrary malformed coordinates and an adaptively
-rotating strict majority of fresh valid coordinates.
+ \item \textbf{Transcript-causal pseudorandomness.} Define a game in which all
+branch pairs and the global digest are fixed before the Fiat--Shamir challenge,
+only then are openings checked and complementary branches evaluated, and the
+one-more target is explicit.  The majority-fresh final-tuple oracle is false by
+Section~\ref{sec:fr-ahmlwe} and cannot be used as an assumption.
  \item \textbf{Global lane freshness.} Enforce non-repeating session
 identifiers across concurrency, crashes, rollback, and distributed signer
 replicas, and bind $\rho$ to that identifier as in the construction above.
@@ -1001,11 +1029,15 @@ malformed-copy splice costing about $2^{\kappa/2}$ classically or
 $2^{\kappa/4}$ under generic quantum search.  The formal half-copy theorem
 shows this cost is optimal for copy-and-combine linear splicing, but it does not
 exclude lattice-specific relations.  Ordinary HMLWE proves aggregate masking
-when all lanes are valid or one fixed lane remains valid throughout; it does
-not cover an adaptively rotating valid majority.  The mfr-AHMLWE assumption,
-simultaneous majority extraction, QROM soundness, malicious-key security, and
-concrete aggregate-noise parameters therefore remain necessary before the
-proposal can support a security claim.
+when all lanes are valid or one fixed lane remains valid throughout.  The
+natural majority-fresh extension is not merely unproved: a three-query closed
+cycle cancels every keyed term and distinguishes it from random.  That oracle
+attack over-approximates the actual protocol because it omits
+commit-before-challenge causality, so it is not by itself an additional
+protocol forgery.  A transcript-causal game and reduction, multi-branch
+extraction, QROM soundness, malicious-key security, and concrete aggregate-noise
+parameters therefore remain necessary before the proposal can support a
+security claim.
 
 \begin{thebibliography}{9}
 \bibitem{BLNS23}
