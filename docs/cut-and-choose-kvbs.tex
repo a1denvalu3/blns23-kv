@@ -49,7 +49,11 @@ formalize a natural candidate, majority-fresh aggregate HMLWE,
 and prove reductions to ordinary HMLWE in two important special cases.  The
 fully adaptive, rotating-majority assumption is false as stated: a closed-cycle
 related-input distinguisher cancels every keyed term while leaving only small
-noise.  We also give a protocol-level balanced splicing attack costing
+noise.  Positively, an interactive variant with extractable seed tags,
+scheduled growing arity, a signer-sampled post-commitment challenge, and a
+common hidden-message commitment does reduce to ordinary HMLWE; the same proof
+fails under Fiat--Shamir grinding.  We also give a protocol-level balanced
+splicing attack costing
 $2^{\kappa/2}$ classically (or $2^{\kappa/4}$ with generic quantum search), so
 the construction remains unproven from standard MLWE and needs larger
 cut-and-choose parameters than the all-malformed analysis suggests.
@@ -62,7 +66,9 @@ if valid lane inputs are reusable and a balanced malformed-copy splice even
 with session freshness.  Section~\ref{sec:fr-ahmlwe} refutes the proposed
 adaptive aggregate-HMLWE assumption.  It must not be implemented as a secure
 credential scheme without a different, transcript-causal reduction and revised
-parameters.}}
+parameters.  Section~\ref{sec:unpredictable-repair} proves a standard-HMLWE
+result only for a more interactive variant; it is not a proof of the
+round-optimal construction.}}
 \end{center}
 
 \section{Introduction}
@@ -773,6 +779,152 @@ Subspace-LWE theorem cannot be invoked for tc-AHMLWE without a new reduction
 that handles source-dependent maps and binary selection between preobserved
 module vectors.
 
+\subsection{A provable restriction with an unpredictable challenge}
+\label{sec:unpredictable-repair}
+
+There is a standard-HMLWE proof route if round optimality is relaxed.  The
+following variant combines the parallel-instance argument of
+Chairattana-Apirom et al.~\cite{PCC22} with the fixed-lane lemma above.
+
+First add an extractable seed tag to every branch,
+\[
+ d_{r,i,b}=H_{\mathrm{seed}}(\mathsf{sid}_r,i,b,z_{r,i,b}),
+\]
+and bind every $(d_{r,i,b},\mathbf c_{r,i,b})$ under the global digest.  The
+selected tag and coefficient are transmitted; every other branch is opened by
+its seed.  In the classical ROM, a reduction searches the
+$H_{\mathrm{seed}}$ query list for the selected tag and thereby obtains the
+selected witness.  A branch is \emph{known-valid} if this preimage query
+occurred before the digest was fixed and the derived branch passes the complete
+formation relation.
+
+Use $g$ independent component keys.  The atomic counter $r$ advances on every
+initiated interaction, including an abort.  Prepare $A_r$ branches per
+component, commit to all of them, and only then
+let the signer sample an independent uniform selected index
+$J_{r,i}\in[A_r]$ for every component.  All branches except $J_{r,i}$ are
+opened.  Choose a schedule satisfying
+\[
+ \sum_{r=1}^{q_{\max}}\frac1{A_r}\leq\frac1{3\vartheta};
+ \qquad
+ A_r=\left\lceil
+   3\vartheta\ln(q_{\max}+1)(r+1)
+ \right\rceil
+\]
+is one such schedule.  Call the event that an accepted interaction selects a
+branch that is not known-valid in component $i$ a \emph{cheat in component
+$i$}.
+
+\begin{lemma}[Untouched component]
+Let $\vartheta>1/3$.  In the
+unpredictable-challenge experiment above, the probability that every one of
+the $g$ components is cheated in at least once is at most
+\[
+ (3\vartheta)^{-g}+\varepsilon_{\mathrm{ext}},
+\]
+where $\varepsilon_{\mathrm{ext}}$ covers random-oracle preimage and global
+binding failures.
+\end{lemma}
+
+\begin{proof}
+Fix an interaction and all state before the signer samples its index vector.
+If the signer will accept, at most one branch in a component can fail to be
+known-valid: every nonselected branch is opened and checked.  The conditional
+probability of selecting that branch is therefore at most $1/A_r$.  Hence the
+event that a fixed component is ever cheated is dominated by the event that
+at least one of independent Bernoulli variables with parameters $1/A_r$ is
+one.  Its probability is at most
+\[
+ 1-\prod_r(1-1/A_r)\leq\sum_r1/A_r\leq1/(3\vartheta).
+\]
+This domination remains valid for an adaptive adversary: before each fresh
+index vector is sampled, the identity of the sole branch that could produce
+an accepted cheat is already fixed.  If there is no such branch, fix an
+arbitrary canonical branch only for the dominating experiment.  The indicator
+that the fresh index hits this previsible branch is an independent Bernoulli
+variable even when its identity depends on the preceding transcript.  The
+challenge coordinates use independent random tapes, so the dominating
+ever-hit events are independent across the $g$ components.  Their intersection
+has probability at most
+$(3\vartheta)^{-g}$.  Random-oracle extraction and binding failures add
+$\varepsilon_{\mathrm{ext}}$.
+\end{proof}
+
+Define \emph{uc-AHMLWE} exactly as response-only tc-AHMLWE, except that it uses
+the interactive unpredictable challenge and scheduled arities above.
+
+\begin{theorem}[Unpredictable-challenge aggregate HMLWE]
+For every classical distinguisher $\mathcal A$ against uc-AHMLWE, there is an
+ordinary HMLWE distinguisher $\mathcal B$ such that
+\[
+ \operatorname{Adv}_{\mathrm{uc\text{-}AHMLWE}}(\mathcal A)
+ \leq
+ g\,\operatorname{Adv}_{\mathrm{HMLWE}}(\mathcal B)
+ +2(3\vartheta)^{-g}+2\varepsilon_{\mathrm{ext}}.
+\]
+Consequently, in the ROM the restricted aggregate problem reduces to MLWE by
+BLNS23 Lemma~4.3.
+\end{theorem}
+
+\begin{proof}
+Except on the bad event of the preceding lemma, at least one component is
+untouched, so every selected branch in that component is known-valid in every
+accepted interaction.  Partition such transcripts by their first untouched
+component.  For one part of the partition, embed the HMLWE challenge secret in
+that component and sample all other component secrets locally.  If the
+embedded component is ever cheated in, abort; otherwise its extracted seed
+supplies a fresh HMLWE input and all public blinding terms.  Add the locally
+computed contributions of the other components exactly as in the fixed-lane
+lemma.  A real HMLWE oracle gives the real aggregate response, while a uniform
+HMLWE oracle makes the whole sum uniform.  The partition loses a factor at
+most $g$, and removing the bad event from both experiments costs at most twice
+its probability.
+\end{proof}
+
+The same restriction can support a one-more argument, but only after binding
+all components to one hidden credential message.  Let $\mathsf{Com}$ be a
+binding, hiding, publicly rerandomizable commitment and set
+\[
+ \mu_0=\mathsf{Com}(M;\phi_0),\qquad
+ \mu_{i,b}=\mathsf{Translate}(\mu_0;\Delta_{i,b})
+           =\mathsf{Com}(M;\phi_0+\Delta_{i,b}),
+\]
+where $\Delta_{i,b}$ is derived from the branch seed.  Replace the lane hash by
+$H_i(\mu_{i,b},\rho_{i,b})$.  An opening checks translation from the common
+$\mu_0$ without revealing $M$.  A presented credential contains
+$M$, $\phi_i=\phi_0+\Delta_{i,J_i}$, $\rho_i$, and the rounded aggregate tag.
+Binding implies that credentials on distinct messages have distinct
+$\mu_i$ in every component.  Thus $Q+1$ pairwise-distinct output messages
+after $Q$ accepted issuances contain a fresh HMLWE point in the untouched
+component.  The BLNS23 final-game min-entropy argument then bounds an
+equality-verification guess by $q_V2^{-h}$, where $h$ is the min-entropy of a
+rounded uniform ring element.  Subject to commitment binding, correctness,
+and the standard BLNS23 hybrids, this gives the conditional bound
+\[
+ \operatorname{Adv}_{\mathrm{OM}}(\mathcal A)
+ \leq
+ g\,\operatorname{Adv}_{\mathrm{HMLWE}}(\mathcal B)
+ +2(3\vartheta)^{-g}+2\varepsilon_{\mathrm{ext}}
+ +\operatorname{Adv}_{\mathrm{bind}}+q_V2^{-h}
+ +\varepsilon_{\mathrm{hyb}}+\varepsilon_{\mathrm{corr}}.
+\]
+This common-message commitment is essential: without it, $Q+1$ distinct
+message vectors need not contain a fresh coordinate in any fixed component,
+which is exactly the four-corner obstruction.
+
+\paragraph{Why this theorem does not prove the Fiat--Shamir scheme.}
+For a signer-sampled index, a cheat in one component has probability
+$1/A_r$.  With Fiat--Shamir, the user can try $q_{\mathrm{chal}}$ candidate
+digests and raise this to approximately
+$\min\{1,q_{\mathrm{chal}}/A_r\}$.  If $A_r$ and $g$ are polynomial, a
+polynomial adversary can target every component using polynomially many
+discarded digests.  The untouched-component lemma is therefore false for the
+current round-optimal challenge.  The theorem applies only with an
+unpredictable post-commitment signer challenge, an explicit bound absorbed
+into super-polynomial arity, or a separate unbiasable hidden-selection
+primitive.  The first option adds a challenge/opening round; the second is
+impractical; the third is an additional cryptographic mechanism.
+
 \section{Cut-and-choose analysis}
 
 Call a branch \emph{openable} if its disclosed witness passes every opening
@@ -930,12 +1082,11 @@ used for selective-failure tagging.
 \section{Requirements for a full proof}\label{sec:open}
 
 \begin{enumerate}
- \item \textbf{Transcript-causal pseudorandomness and one-more
-unpredictability.} Prove response-only tc-AHMLWE from a standard lattice
-assumption, then formulate and prove its equality-verification one-more
-companion.  The majority-fresh final-tuple oracle is false, while a
-complete-vector evaluation oracle is rectangle-distinguishable, so neither can
-replace these two steps.
+ \item \textbf{Round-optimal transcript-causal pseudorandomness.} Prove
+response-only tc-AHMLWE and its equality-verification one-more companion for
+the Fiat--Shamir protocol.  Section~\ref{sec:unpredictable-repair} proves the
+corresponding aggregate reduction only with an unpredictable signer challenge;
+Fiat--Shamir grinding invalidates its untouched-component lemma.
  \item \textbf{Global lane freshness.} Enforce non-repeating session
 identifiers across concurrency, crashes, rollback, and distributed signer
 replicas, and bind $\rho$ to that identifier as in the construction above.
@@ -1151,7 +1302,14 @@ parameters therefore remain necessary before the proposal can support a
 security claim.  The transcript-causal candidate blocks that particular cycle
 only by forcing a full $\kappa$-bit challenge; it remains unproved, and
 response pseudorandomness alone does not imply one-more security for the
-separable verifier.
+separable verifier.  A positive standard-HMLWE theorem is available after
+adding extractable seed tags, a common hidden-message commitment, scheduled
+growing arity, and an unpredictable signer challenge.  Its untouched-component
+proof fails for Fiat--Shamir because polynomially many discarded digests can
+target every component.  Thus the present evidence identifies a sharp
+tradeoff: the aggregate construction can be proved from ordinary HMLWE in the
+more interactive variant, while the two-message version still needs the new
+tc-OMHLF assumption or a different hidden-selection mechanism.
 
 \begin{thebibliography}{9}
 \bibitem{BLNS23}
