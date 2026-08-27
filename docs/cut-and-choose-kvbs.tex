@@ -539,6 +539,65 @@ $d\log_2p=128$ bits for $v$:
 If the messages are considered part of the stored credential rather than
 external signed data, 8,192 additional bytes give a 16,400-byte credential.
 
+\subsection{Higher-arity cut-and-choose}
+
+The dominant term can be reduced by replacing binary pairs with groups of
+$A=2^a$ branches.  Fiat--Shamir selects one branch per group to remain
+unopened; the other $A-1$ branches are disclosed as 32-byte seeds.  If there
+are $g$ independent groups, making every selected branch malformed succeeds
+with probability
+\[
+ A^{-g}=2^{-ag}.
+\]
+For a conservative 128-bit post-quantum grinding target we require
+$ag\geq256$.  Only $g$ full lattice vectors are then transmitted.  Ignoring
+the response proof, the fixed first-message size is
+\[
+ g|\mathbf c|+g(A-1)\cdot32+48+32\text{ bytes},
+ \qquad g=\left\lceil\frac{256}{\log_2 A}\right\rceil.
+\]
+
+\begin{table}[h]
+\centering
+\begin{tabular}{rrrrr}
+\toprule
+$A$ & $g$ & challenge bits & generated branches & first message \\
+\midrule
+2   & 256 & 256 & 512   & 27.62 MiB \\
+4   & 128 & 256 & 512   & 13.82 MiB \\
+16  & 64  & 256 & 1,024 & 6.93 MiB \\
+32  & 52  & 260 & 1,664 & 5.66 MiB \\
+64  & 43  & 258 & 2,752 & 4.72 MiB \\
+256 & 32  & 256 & 8,192 & 3.70 MiB \\
+512 & 29  & 261 & 14,848 & 3.58 MiB \\
+1024& 26  & 260 & 26,624 & 3.62 MiB \\
+\bottomrule
+\end{tabular}
+\caption{Bandwidth/computation tradeoff for higher-arity cut-and-choose.
+The branch count approximates user generation and signer opening work.}
+\label{tab:arity}
+\end{table}
+
+For bandwidth alone, the stated parameters are minimized near $A=512$, where
+the first message is 3,753,840 bytes (3.58 MiB): 29 full vectors consume
+3,279,552 bytes, 14,819 opened seeds consume 474,208 bytes, and the global
+commitment plus session identifier consume 80 bytes.  The corresponding MAC
+contains 29 tags and one 16-byte rounded value, hence
+\[
+ 29\cdot32+16=944\text{ bytes}.
+\]
+This setting requires generating and checking 14,848 branches, however, versus
+512 in the binary construction.  Values such as $A=16$ or $A=32$ may therefore
+give a better end-to-end tradeoff: they reduce issuance to 6.93 or 5.66 MiB
+while increasing branch computation by only two to three times.  A benchmark
+must include deterministic expansion, hash-to-ring, matrix--vector products,
+and response-proof scaling before selecting $A$.
+
+The two-fork extraction argument generalizes: two accepting transcripts whose
+selected indices differ in some group cause the second transcript to open the
+branch selected in the first.  The proof must use an $A$-ary challenge and bind
+all branches in the global commitment.
+
 The credential contains $\kappa$ message/tag pairs unless they admit a safe
 compression mechanism.  This is a major cost and must be included in any
 comparison.  A credible evaluation should report total issuance bytes, prover
