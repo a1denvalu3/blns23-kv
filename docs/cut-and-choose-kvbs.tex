@@ -520,7 +520,7 @@ out lattice-specific attacks using short nontrivial relations among distinct
 hash vectors.  The closed-cycle attack below refutes mfr-AHMLWE even without
 such lattice-specific relations.
 
-\section{Majority-fresh aggregate HMLWE}\label{sec:fr-ahmlwe}
+\section{Aggregate HMLWE candidates and limits}\label{sec:fr-ahmlwe}
 
 We isolate the exact pseudorandomness property needed after the usual BLNS23
 hybrids have removed the public blinding terms.  This abstraction intentionally
@@ -621,6 +621,101 @@ target.  Calling such a transcript-aware game ``aggregate HMLWE'' would be a
 new protocol-specific assumption rather than the simple oracle assumption
 above.
 
+\subsection{A transcript-causal candidate}
+
+The natural response-only repair is the following idealized experiment.  In
+issuance query $j$, the adversary first fixes a unique session identifier and
+two coefficient vectors
+\[
+  (\mathbf a_{j,i,0},\mathbf a_{j,i,1})\qquad(i\in[\kappa])
+\]
+under one binding global digest $C_j$.  Only then is
+$\boldsymbol\chi_j=H_{\mathrm{chal}}(\mathsf{sid}_j,C_j)$ sampled.  The
+adversary must open branch $\chi_{j,i}$ in every lane and prove that it is an
+admissible hash-derived coefficient with the prescribed session binding.  If
+all openings verify, the real experiment returns
+\[
+ z_j=\sum_i\mathbf s_i^T\mathbf a_{j,i,1-\chi_{j,i}}+e_j;
+\]
+the response-only ideal experiment returns an independent uniform element of
+$R_q$.  Discarded candidate digests still count among the adversary's
+$q_{\mathrm{chal}}$ random-oracle queries.  Hash-derived selected coefficients
+are required to use globally fresh lane labels.  We call indistinguishability
+of these experiments \emph{transcript-causal aggregate HMLWE}
+(tc-AHMLWE).
+
+This definition deliberately binds the alternatives rather than accepting a
+post-challenge selected tuple.  It also remains only a candidate assumption:
+the fixed-lane reductions below do not prove it.
+
+\begin{lemma}[The closed cycle becomes a full-challenge fixed point]
+Consider the three-query closed-cycle construction above, with each branch
+coefficient fixed under a binding digest before its challenge.  Except for a
+collision between the two hash-derived alternatives in a lane, any causal
+realization of the cycle fixes all $\kappa$ challenge bits of the query whose
+challenge is sampled last.  Its success probability is therefore at most
+$q_{\mathrm{chal}}2^{-\kappa}$, plus the binding and hash-collision
+probabilities.
+\end{lemma}
+
+\begin{proof}
+Let query $\ell$ be challenged last.  In every lane
+$i\in P_\ell$, its own selected branch must be the already fixed malformed
+branch, fixing $\chi_{\ell,i}$.  If $i\notin P_\ell$, another query $j$ is the
+unique malformed query in that lane.  The fixed value
+\[
+ \mathbf a_{j,i}=-\sum_{r\ne j}\mathbf a_{r,i}
+\]
+already contains one particular alternative from query $\ell$.  For the
+cycle identity to survive, query $\ell$ must select that alternative, again
+fixing $\chi_{\ell,i}$.  Thus every bit of
+$\boldsymbol\chi_\ell$ is prescribed.  A fresh random-oracle challenge hits
+that vector with probability $2^{-\kappa}$; a union bound over candidate
+digests gives the claim.
+\end{proof}
+
+The lemma explains precisely why the non-causal distinguisher is not an
+immediate protocol attack.  It does not prove tc-AHMLWE: other adaptive
+relations need not have the same closed-cycle form.
+
+There is a second, structural obstruction to a conventional HMLWE proof.
+Giving a reduction an evaluation oracle for
+\[
+ F(x_0,\ldots,x_{\kappa-1})
+   =\sum_i\mathbf s_i^T H_i(x_i)
+\]
+cannot be pseudorandom on the complete-vector domain.  Four evaluation queries
+distinguish it by the rectangle identity
+$F_{00}+F_{11}-F_{10}-F_{01}=0$ (up to correctness noise).  The real keyed
+verifier, however, exposes only an equality predicate on a guessed rounded
+value, not the value $F(\mathbf x)$ itself.  Consequently, a game strong enough
+to support the one-more proof must combine causal issuance responses with this
+equality-only verification interface and must bound the probability of
+producing $Q+1$ accepting, pairwise-distinct vector credentials after $Q$
+accepted issuances.  This is a one-more hidden-linear-function assumption,
+closer in character to a new one-more assumption than to BLNS23's ordinary
+HMLWE assumption.  Proving response-only tc-AHMLWE would not by itself settle
+that one-more game.
+
+For precision, call the resulting experiment
+\emph{transcript-causal one-more hidden linear functions} (tc-OMHLF).
+It samples the lane secrets, gives the adversary the causal issuance interface
+above, and gives it only the keyed predicate
+\[
+ \mathsf{Check}(\mathbf x,v)=
+ \left[v=\roundp{\sum_i\mathbf s_i^T H_i(x_i)}\right].
+\]
+After at most $Q$ accepted issuance queries, the adversary wins by producing
+$Q+1$ pairwise-distinct vectors $\mathbf x^{(r)}$ and values $v^{(r)}$ for
+which $\mathsf{Check}$ accepts.  Individual lane inputs may repeat among output
+vectors: prohibiting that would weaken the ordinary one-more credential
+definition and simply define away rectangle splicing.  The tc-OMHLF
+assumption is that every polynomial-time adversary has negligible winning
+probability, with its Fiat--Shamir query count included in the concrete
+advantage.  This is an explicit and falsifiable assumption, but it is close to
+the desired security property of the underlying aggregate MAC; it must not be
+advertised as a reduction to MLWE.
+
 \begin{lemma}[Fixed honest lane special case]
 Suppose there is an index $i^*$ such that $i^*\in V_j$ in every aggregate
 query.  Then the fixed-lane restriction of the aggregate game reduces to
@@ -662,6 +757,21 @@ $\mathbf s_i^T\mathbf a_{j,i}$; an ordinary HMLWE oracle only evaluates fresh
 hashed inputs.  The closed-cycle attack shows that granting all such final
 tuples at once is too strong, while the protocol-specific causal restriction
 is not captured by standard HMLWE.
+
+\subsection{Why Subspace LWE does not directly close the gap}
+
+Subspace LWE~\cite{Pietrzak12} is a tempting candidate because it permits
+adaptive affine transformations of an LWE secret and sample vector and reduces
+the resulting problem to ordinary LWE when the transformations retain
+sufficient rank.  Its ordering is different in the crucial place: the
+adversary chooses the affine maps and the oracle then samples a fresh uniform
+vector.  Here the user may first obtain both random-oracle branch vectors and
+then choose every malformed branch as a function of them.  After the digest is
+fixed, the only fresh randomness is the $\kappa$-bit branch selector, not a
+fresh uniform module vector independent of that function.  Consequently the
+Subspace-LWE theorem cannot be invoked for tc-AHMLWE without a new reduction
+that handles source-dependent maps and binary selection between preobserved
+module vectors.
 
 \section{Cut-and-choose analysis}
 
@@ -820,11 +930,12 @@ used for selective-failure tagging.
 \section{Requirements for a full proof}\label{sec:open}
 
 \begin{enumerate}
- \item \textbf{Transcript-causal pseudorandomness.} Define a game in which all
-branch pairs and the global digest are fixed before the Fiat--Shamir challenge,
-only then are openings checked and complementary branches evaluated, and the
-one-more target is explicit.  The majority-fresh final-tuple oracle is false by
-Section~\ref{sec:fr-ahmlwe} and cannot be used as an assumption.
+ \item \textbf{Transcript-causal pseudorandomness and one-more
+unpredictability.} Prove response-only tc-AHMLWE from a standard lattice
+assumption, then formulate and prove its equality-verification one-more
+companion.  The majority-fresh final-tuple oracle is false, while a
+complete-vector evaluation oracle is rectangle-distinguishable, so neither can
+replace these two steps.
  \item \textbf{Global lane freshness.} Enforce non-repeating session
 identifiers across concurrency, crashes, rollback, and distributed signer
 replicas, and bind $\rho$ to that identifier as in the construction above.
@@ -1037,7 +1148,10 @@ commit-before-challenge causality, so it is not by itself an additional
 protocol forgery.  A transcript-causal game and reduction, multi-branch
 extraction, QROM soundness, malicious-key security, and concrete aggregate-noise
 parameters therefore remain necessary before the proposal can support a
-security claim.
+security claim.  The transcript-causal candidate blocks that particular cycle
+only by forcing a full $\kappa$-bit challenge; it remains unproved, and
+response pseudorandomness alone does not imply one-more security for the
+separable verifier.
 
 \begin{thebibliography}{9}
 \bibitem{BLNS23}
@@ -1052,6 +1166,12 @@ R.~Chairattana-Apirom, L.~Hanzlik, J.~Loss, A.~Lysyanskaya, and B.~Wagner.
 Instance Cut-and-Choose and More.
 \newblock IACR Cryptology ePrint Archive, Report 2022/007, 2022.
 \newblock \url{https://eprint.iacr.org/2022/007}.
+
+\bibitem{Pietrzak12}
+K.~Pietrzak.
+\newblock Subspace LWE.
+\newblock In \emph{TCC 2012}, LNCS 7194, pp.~548--563, 2012.
+\newblock \url{https://www.iacr.org/archive/tcc2012/71940166/71940166.pdf}.
 
 \bibitem{BS22}
 W.~Beullens and G.~Seiler.
