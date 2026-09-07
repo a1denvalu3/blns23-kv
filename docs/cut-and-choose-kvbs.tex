@@ -9,12 +9,9 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric}
 
-\newtheorem{definition}{Definition}
 \newtheorem{theorem}{Theorem}
 \newtheorem{lemma}{Lemma}
 \newtheorem{corollary}{Corollary}
-\newtheorem{conjecture}{Conjecture}
-\newtheorem{remark}{Remark}
 \newcommand{\R}{R_q}
 \newcommand{\sample}{\mathrel{\leftarrow\joinrel\$}}
 \newcommand{\roundp}[1]{\left\lceil #1\right\rfloor_p}
@@ -28,99 +25,125 @@ Keyed-Verification Credentials}
 \maketitle
 
 \begin{abstract}
-We investigate a cut-and-choose variant of the keyed-verification blind
-signature of Beullens, Lyubashevsky, Nguyen, and Seiler (BLNS23).  The goal is
-to remove the expensive first-round zero-knowledge proof that a user-supplied
-lattice commitment contains correctly evaluated hash functions.  A user sends
-two commitments in each of $\kappa$ independent lanes.  After an unpredictable
-challenge, the user opens one commitment per lane and the signer evaluates
-only the complementary commitments.  Crucially, the signer releases a single
-aggregate response rather than the lane responses.  A direct chosen-input
-attack must then evade all $\kappa$ checks to remove every honestly formed
-mask, which occurs with probability $2^{-\kappa}$.  The resulting credential
-authenticates a vector of hidden messages and is verified with the tuple of
-lane keys.  We give the construction, its correctness calculation, and a
-conditional security argument.  The central unresolved question is a robust
-``one honest lane'' lemma for adversarially correlated lattice inputs.  We
-identify a four-corner linear splicing attack whenever valid lane inputs can be
-reused across issuance sessions.  The current construction attempts to exclude
-that attack by deriving every $\rho$ from a unique session identifier.  We
-formalize a natural candidate, majority-fresh aggregate HMLWE,
-and prove reductions to ordinary HMLWE in two important special cases.  The
-fully adaptive, rotating-majority assumption is false as stated: a closed-cycle
-related-input distinguisher cancels every keyed term while leaving only small
-noise.  Positively, an interactive variant with extractable seed tags,
-scheduled growing arity, a signer-sampled post-commitment challenge, and a
-common hidden-message commitment does reduce to ordinary HMLWE; the same proof
-fails under Fiat--Shamir grinding.  Polynomially many Fiat--Shamir trials can
-cover every lane with a selected malformed branch, while granting the
-reduction polynomial chosen-input leakage is itself insecure.  We also give a
-protocol-level balanced splicing attack costing
-$2^{\kappa/2}$ classically (or $2^{\kappa/4}$ with generic quantum search), so
-the construction remains unproven from standard MLWE and needs larger
-cut-and-choose parameters than the all-malformed analysis suggests.
+A blind signature lets a user obtain a credential without revealing its
+message to the signer.  In the BLNS23 scheme, proving that the user's request
+is well formed is expensive because the proof must check hash computations.
+We explore replacing this proof with cut-and-choose: prepare several
+candidates, reveal some for checking, and use the rest to form the credential.
+Our two-message proposal runs this process in parallel \emph{lanes}, each
+with its own key, and returns only the sum of their responses.  We describe
+how it works, when honest credentials verify, and how many bytes it sends.
+We also show how combining earlier responses can produce an extra credential.
+With $\kappa$ lanes, the balanced version of this attack costs about
+$2^{\kappa/2}$ classical work or $2^{\kappa/4}$ quantum work.  Avoiding this
+attack is necessary but does not establish security.  We then give a separate
+four-message variant in which the signer chooses what to check after the
+user commits.  Its proof keeps one fixed lane valid throughout the issuance
+history and reduces the problem of distinguishing aggregate responses from
+random to hashed module learning with errors (HMLWE).  Committing every lane
+to the same hidden message supports a further argument against producing more
+credentials than were issued.  This argument still depends on completing the
+protocol simulation and correctness analysis.  Both variants also need a
+full privacy proof and concrete secure parameters.
 \end{abstract}
 
 \begin{center}
 \fbox{\parbox{0.92\linewidth}{\textbf{Security status.}
-The construction is unproven.  Section~\ref{sec:rectangle} gives a free break
-if valid lane inputs are reusable and a balanced malformed-copy splice even
-with session freshness.  Section~\ref{sec:fr-ahmlwe} refutes the proposed
-adaptive aggregate-HMLWE assumption.  It must not be implemented as a secure
-credential scheme without a different, transcript-causal reduction and revised
-parameters.  Section~\ref{sec:unpredictable-repair} proves a standard-HMLWE
-result only for a more interactive variant; it is not a proof of the
-round-optimal construction.}}
+The two-message proposal has no complete security proof.  The attacks in
+Section~\ref{sec:rectangle} show how large its parameters must be to resist
+those attacks; larger parameters alone do not prove it secure.  The
+four-message variant in Section~\ref{sec:interactive} has a reduction for a
+simplified response game.  Extending that result to the full credential
+protocol, proving privacy, and choosing secure parameters remain open.}}
 \end{center}
 
 \section{Introduction}
 
-BLNS23 gives a compact keyed-verification blind signature whose issuance
-protocol contains two non-interactive zero-knowledge proofs.  The user's proof
-$\pi_1$ establishes knowledge of short $\mathbf r,\mathbf e_2$ and a message
-$m$ satisfying
+A user obtains a credential during \emph{issuance} and later shows it during
+\emph{presentation}.  A blind-signature protocol should hide the user's
+message during issuance and prevent the signer from linking a later
+presentation to that exchange.  In a \emph{keyed-verification} scheme, checking
+the credential requires a secret key, usually held by the signer.
+
+BLNS23~\cite{BLNS23} gives such a scheme with small credentials.  Issuance
+uses two non-interactive zero-knowledge (NIZK) proofs.  Each proof lets its
+recipient check a claim without learning the secret data used to prove it,
+and requires no further exchange.  The user's proof $\pi_1$ shows that it
+knows short vectors $\mathbf r,\mathbf e_2$ and a message $m$ satisfying
 \[
   \rho=H_\rho(\mathbf r,\mathbf e_2),\qquad
   \mathbf c=B\mathbf r+\mathbf e_2+H_R(m,\rho).
 \]
-This proof prevents a malicious user from choosing $\mathbf c$ so as to query
-the signing secret on a scaled unit vector.  Its statement includes hash
-evaluation and is the principal issuance bottleneck.
+Here $\mathbf c$ is the user's blinded request.  The proof checks that it
+was formed from a message and small random vectors in the required way.
+Without this check, a user could choose a special input, such as a scaled
+unit vector, to learn about the signing key.  Checking the hash computations
+inside the proof is the main cost we want to remove.
 
-We ask whether statistical cut-and-choose can replace $\pi_1$.  A naive
-construction with $N$ commitments, of which $N-1$ are opened, has soundness
-error $1/N$ and therefore requires an infeasible $N\geq 2^\lambda$.  Our
-candidate instead uses $\kappa$ pairs and returns only one aggregate response.
-If a single honestly generated unopened lane computationally masks all
-malformed lanes, a useful chosen-input attack must corrupt every unopened lane
-simultaneously.  Parallel repetition then gives error $2^{-\kappa}$.
-Applying Fiat--Shamir to the full vector of pair commitments places the
-challenge and openings in the user's first message.  The signer returns one
-aggregate response, giving a two-message, round-optimal issuance protocol.
+Our proposal uses $\kappa$ \emph{lanes}: parallel copies of this commitment
+step, each with its own signing key.  In every lane, the user prepares two
+candidate commitments, called \emph{branches}.  A challenge chooses one to
+open for checking.  The other is selected for the signer's response.  The
+signer evaluates the selected branches and returns only their sum, called the
+\emph{aggregate response}.
 
-The construction changes the message space.  A credential authenticates a
-vector $(m_0,\ldots,m_{\kappa-1})$, not one message copied across all lanes.
-The opened message in every pair is a decoy; the complementary message remains
-hidden during issuance and is disclosed at presentation.  An application may
-derive a single payload by hashing the ordered vector.
+Each branch is generated from a short random seed.  Revealing that seed lets
+the signer reconstruct and check the branch.  A hash of the complete branch
+table fixes every branch before the challenge is chosen.  In the two-message
+proposal, the user derives the challenge by hashing this commitment, using
+the Fiat--Shamir method.  The signer's response proof checks lattice equations
+and size bounds, with no hash computation inside the proof.
 
-\paragraph{Status.}
-Correctness and the elementary cut-and-choose probability are immediate.  A
-complete proof of blindness and one-more unforgeability is not supplied here.
-In particular, Section~\ref{sec:open} identifies the one-honest-lane lemma,
-related-input security, selective failure, and concurrency as open obligations.
+The credential covers an ordered list of messages
+$(m_0,\ldots,m_{\kappa-1})$, one per selected branch.  The message in the
+opened branch is a decoy; the selected message stays hidden until
+presentation.  An application can hash the ordered list to obtain one
+payload.  But because the response adds separate contributions for each
+message, earlier responses can sometimes be combined into a new credential.
+Section~\ref{sec:rectangle} gives these \emph{splicing attacks}.
 
-\section{Preliminaries and notation}
+We also study a four-message variant.  The signer chooses the challenge
+after receiving the user's commitment, and the number of branches per lane
+follows a schedule.  This gives the proof a useful guarantee: with high
+probability, one fixed lane stays valid throughout all issuances.  Binding
+all lanes to the same hidden message then helps rule out extra credentials.
+The remaining simulation steps and correctness analysis are still needed to
+complete this argument, and privacy needs its own proof.
 
-Let $\R=\mathbb Z_q[X]/(X^d+1)$.  Vectors are written in bold and all ring
-operations are modulo $q$.  Let $D_s,D_r,D_e$ be bounded short distributions,
-and let $\roundp{\cdot}$ retain the prescribed high-order coefficient bits.
-The security parameter and number of cut-and-choose lanes are denoted
-$\lambda$ and $\kappa$.  The balanced splicing attack of
-Section~\ref{sec:rectangle} costs only about $2^{\kappa/2}$ classically and
-$2^{\kappa/4}$ under generic quantum search.  Consequently, 128-bit concrete
-security requires at least $\kappa=256$ in the classical ROM and $\kappa=512$
-in the QROM before accounting for multi-target and reduction losses.
+Section~\ref{sec:security-targets} explains the security goals and the
+fixed-lane argument.  Section~\ref{sec:interactive} gives the four-message
+variant, and Section~\ref{sec:open} lists the remaining work.  The size
+estimates in Section~\ref{sec:efficiency} cover the two-message proposal and
+an optional version with more branches per lane.
+
+\section{Notation and basic tools}
+
+We work in the polynomial ring $\R=\mathbb Z_q[X]/(X^d+1)$.  Its elements
+have $d$ coefficients, each reduced modulo $q$; multiplication also uses the
+rule $X^d=-1$.  Bold symbols denote vectors of $n$ ring elements.  The
+notation $\mathbf s^T\mathbf u$ means their inner product: multiply matching
+entries and add the results.
+
+The distributions $D_s,D_r,D_e$ sample small secrets and random errors.
+We call a vector \emph{short} when it satisfies the required norm bound.
+The operation $\roundp{\cdot}$ keeps only the prescribed high-order bits of
+each coefficient, giving a result modulo the smaller rounding modulus $p$.
+The security parameter is $\lambda$, and the binary proposal has $\kappa$
+lanes.  Below, $[\kappa]$ denotes the lane index set
+$\{0,\ldots,\kappa-1\}$.
+
+Some proofs use the \emph{random-oracle model} (ROM), which treats a hash as
+an ideal random function: a new input gets a random answer, and repeating an
+input gives the same answer.  The quantum version (QROM) also allows queries
+in superposition.  A classical ROM proof does not automatically cover such
+quantum queries.
+
+The balanced splicing attack of Section~\ref{sec:rectangle} costs about
+$2^{\kappa/2}$ classically or $2^{\kappa/4}$ with generic quantum search.
+Resisting this attack at a 128-bit level therefore requires at least
+$\kappa=256$ classically or $\kappa=512$ quantumly.  These are starting
+points; a full security bound must also account for other attacks, attempts
+against multiple targets, and losses in the reduction.
 
 For lane $i$, the signer samples
 \[
@@ -132,22 +155,26 @@ publishes a random matrix $B_i$ and
 \]
 The keyed verification key is the tuple
 $\mathsf{sk}=(\mathbf s_0,\ldots,\mathbf s_{\kappa-1})$.
-It is generally \emph{not} sufficient to retain only
-$\sum_i\mathbf s_i$, because different lanes authenticate different hash
-inputs.
+The verifier needs these separate keys because each lane authenticates a
+different hash input.  Keeping only their sum would generally lose the
+information needed to verify a credential.
 
-We require a batched lattice NIZK $\Pi_{\mathrm{resp}}$ and a 384-bit
-collision-resistant hash $H_{\mathrm{com}}$.  The latter gives approximately
-128-bit collision resistance against generic quantum collision search.  The
-NIZK contains no hash preimage relation.
+The signer uses one NIZK, $\Pi_{\mathrm{resp}}$, to prove the required lattice
+relations for all lanes together.  This proof does not need to show knowledge
+of a hash input.  A 384-bit hash $H_{\mathrm{com}}$ binds the branch table:
+changing the table while keeping the same digest would require a hash
+collision.  Its output length provides approximately 128-bit resistance to
+generic quantum collision search.
 
-\section{Construction}
+\section{Two-message construction}\label{sec:construction}
 
-\subsection{Commit phase}
+\subsection{Preparing and committing to the branches}
 
 The user independently constructs two branches $b\in\{0,1\}$ in each lane
-$i\in\{0,\ldots,\kappa-1\}$.  It samples a 32-byte seed $z_{i,b}$ and uses a
-domain-separated XOF and canonical deterministic sampler to derive
+$i\in\{0,\ldots,\kappa-1\}$.  It samples a 32-byte seed $z_{i,b}$ and expands it with an extendable-output
+function (XOF), which produces as many pseudorandom bytes as needed.  Separate
+labels distinguish the uses of this function.  A fixed sampling procedure
+turns those bytes into
 \[
  (m_{i,b},\mathbf r_{i,b},\mathbf e_{2,i,b})
  =G(\mathsf{sid},i,b,z_{i,b}),
@@ -161,20 +188,21 @@ distributions.  It computes
  \mathbf c_{i,b}&=B_i\mathbf r_{i,b}+\mathbf e_{2,i,b}
                    +\mathbf u_{i,b}.
 \end{align*}
-The session identifier $\mathsf{sid}$ includes the protocol version, issuer,
-key epoch, and fresh contributions from both parties.  The user commits once
-to the complete canonically ordered vector of branches:
+The session identifier $\mathsf{sid}$ identifies the protocol version, issuer,
+and key epoch (the period using the same set of keys).  It also includes fresh
+values from both parties.  The user hashes the complete branch table in a
+fixed order:
 \[
  C=H_{\mathrm{com}}(\mathsf{protocol},\mathsf{issuer},\mathsf{pk},
        \mathsf{sid},
        \mathsf{Encode}(\mathbf c_{0,0},\mathbf c_{0,1},\ldots,
                        \mathbf c_{\kappa-1,0},\mathbf c_{\kappa-1,1})).
 \]
-The encoding includes the branch count, dimensions, and unambiguous lengths.
-Thus one 48-byte digest binds all $2\kappa$ branches and their ordering before
-challenge selection.
+The encoding records the branch count, dimensions, and lengths so that it has
+only one interpretation.  This single 48-byte digest commits the user to all
+$2\kappa$ branches and their order before the challenge is chosen.
 
-\subsection{Fiat--Shamir challenge and opening}
+\subsection{Choosing and checking the open branches}
 
 After all commitments are fixed, the user derives
 \[
@@ -183,28 +211,26 @@ After all commitments are fixed, the user derives
    \mathsf{sid},C)
  \in\{0,1\}^{\kappa}.
 \]
-For every lane, the user opens branch $\chi_i$ by disclosing only the seed
-$z_{i,\chi_i}$, and sends the full vector $\mathbf c_{i,1-\chi_i}$ for the
-complementary branch.  On receipt, the signer first recomputes
-$\boldsymbol\chi$ from the transmitted $C$ and verifies that each seed and full
-vector has the branch role prescribed by $\chi_i$.  It expands every disclosed
-seed, recomputes the
-opened $\mathbf c_{i,\chi_i}$, and combines these with the received complementary
-vectors in canonical order.  It recomputes the global commitment $C$ over all
-512 reconstructed branches.  It also checks both hash computations, the linear
-relation, all norm bounds, canonical encodings, and domain separators for every
-opened branch.  It aborts without producing any
-secret-dependent output if any check fails.  Define the selected branch
-$b_i^*=1-\chi_i$ and abbreviate
-$\mathbf c_i^*=\mathbf c_{i,b_i^*}$.
+In lane $i$, the user reveals seed $z_{i,\chi_i}$ so that the signer can
+check branch $\chi_i$.  For the other branch, the user sends the full vector
+$\mathbf c_{i,1-\chi_i}$ and keeps its seed private.
 
-The selected seeds are retained privately by the user.  At presentation the
-user reveals only $(m_i^*,\rho_i^*)$, never $z_{i,b_i^*}$: revealing a selected
-seed would let the issuer reconstruct $\mathbf r_i^*,\mathbf e_{2,i}^*$ and
-link the presented credential to its issuance commitment exactly.  The XOF,
-rejection-sampling order, byte encoding, and maximum iteration policy are part
-of the protocol specification so that seed expansion is deterministic and
-cross-platform reproducible.
+The signer recomputes the challenge from $C$ and checks that the seeds and
+vectors have the assigned roles.  It expands every revealed seed and combines
+the reconstructed branches with the received vectors in the agreed order.
+It then hashes all $2\kappa$ branches and checks that the result equals $C$.
+For each opened branch, it also checks the hash computations, lattice
+equation, size bounds, encoding, and function labels.  If any check fails,
+it stops without returning a value that depends on its secret key.  We call
+$b_i^*=1-\chi_i$ the \emph{selected branch} and write
+$\mathbf c_i^*=\mathbf c_{i,b_i^*}$ for its vector.
+
+The selected seeds stay private even at presentation.  The user reveals only
+$(m_i^*,\rho_i^*)$: a selected seed would also reveal the blinding vectors
+$\mathbf r_i^*,\mathbf e_{2,i}^*$ and let the issuer match the credential to
+its issuance exactly.  Implementations must agree on the XOF, sampling
+order, byte encoding, and iteration limits so that the same seed always
+recreates the same branch.
 
 Thus issuance has the two-message form
 \[
@@ -214,12 +240,13 @@ Thus issuance has the two-message form
  \qquad
  \mathsf{Signer}\longrightarrow\mathsf{User}:h,\pi_{\mathrm{resp}}.
 \]
-Fiat--Shamir removes the challenge round but permits offline transcript
-grinding.  Prescribing $k$ challenge bits costs about $2^k$ classical
-random-oracle queries and about $2^{k/2}$ generic quantum queries.  A tight
-QROM proof is therefore required for the post-quantum parameter choice.  A
-fresh signer nonce limits precomputation, but adds a message unless it is
-already supplied by an authenticated session setup.
+Fiat--Shamir saves an exchange with the signer, but the user can try many
+branch tables locally until the hash gives a favorable challenge.  This
+search is called \emph{grinding}.  Fixing $k$ chosen challenge bits takes
+about $2^k$ classical random-oracle queries or $2^{k/2}$ generic quantum
+queries.  The quantum security analysis must account for this search.  A
+fresh random value from the signer limits work done in advance, but costs
+another message unless an authenticated session setup already provides it.
 
 \begin{figure}[t]
 \centering
@@ -261,20 +288,21 @@ $\chi_i=1$.}
 \label{fig:binary-lane}
 \end{figure}
 
-\subsection{Aggregate response}
+\subsection{Returning one aggregate response}
 
-The signer derives a bounded aggregate error deterministically from the entire
-selected transcript,
+The signer derives a small error from its secret key $K$ and the complete
+selected input.  Repeating the same input gives the same error.  It computes
 \[
  e=H_{D_e}(K,\mathsf{sid},\mathbf c_0^*,\ldots,
                          \mathbf c_{\kappa-1}^*),
 \]
-and computes only
+and then computes the aggregate response
 \[
  h=\sum_{i=0}^{\kappa-1}\mathbf s_i^T\mathbf c_i^*+e.
 \]
-No individual lane value is released or made observable through timing or
-errors.  The signer proves the batched relation
+Only the sum $h$ is returned.  Individual lane values must also stay hidden
+from timing and error messages.  The signer supplies one proof that the
+response matches all lane keys and that the secrets and errors are small:
 \[
  \mathcal R_{\mathrm{resp}}:\quad
  \begin{cases}
@@ -286,11 +314,11 @@ errors.  The signer proves the batched relation
   \ \|e\|\leq\beta_e.
  \end{cases}
 \]
-The witness is the tuple of all component secrets and errors.  Proving knowledge
-only of $S=\sum_i\mathbf s_i$ is insufficient because the
-$\mathbf c_i^*$ differ.  The important efficiency observation is that
-$\mathcal R_{\mathrm{resp}}$ consists only of lattice-linear relations and
-norm bounds; it contains no hash evaluation.
+The proof's \emph{witness} is the secret data that makes these equations
+hold: all lane secrets and errors.  It must cover each lane separately,
+since the inputs $\mathbf c_i^*$ differ.  Knowing only the sum of the keys
+would not suffice.  These are linear lattice equations and norm bounds,
+which avoid the expensive hash computation inside the user's original proof.
 
 \begin{figure}[t]
 \centering
@@ -339,16 +367,16 @@ norm bounds; it contains no hash evaluation.
 \node[font=\small,above=2mm of unblind] {user};
 \end{tikzpicture}%
 }
-\caption{Aggregate-key evaluation.  Each selected commitment is evaluated
-under an independent component key, but individual lane responses are never
-released.  Summation collapses the vector of evaluations to one polynomial;
-the user then unblinds and rounds it to the compact value $v$.}
+\caption{One response from many lanes.  The signer evaluates each selected
+commitment under its lane key and returns only their sum, with a small error.
+The user removes the blinding terms and rounds the result to obtain $v$.}
 \label{fig:aggregate-flow}
 \end{figure}
 
-\subsection{Unblinding and presentation}
+\subsection{Finishing and presenting the credential}
 
-After verifying the response proof, the user computes
+After checking the response proof, the user removes its blinding terms and
+rounds the result:
 \[
  v=\roundp{h-\sum_i\mathbf t_i^T\mathbf r_i^*}
 \]
@@ -357,23 +385,26 @@ and stores
  \sigma=((m_i^*,\rho_i^*)_{i=0}^{\kappa-1},v),
  \quad (m_i^*,\rho_i^*)=(m_{i,b_i^*},\rho_{i,b_i^*}).
 \]
-At presentation, the keyed verifier accepts iff
+At presentation, the verifier uses its secret keys to recompute the
+expected value.  It accepts exactly when
 \[
  v=\roundp{\sum_i\mathbf s_i^T
         H_R(\mathsf{credential\mbox{-}lane},i,m_i^*,\rho_i^*)}.
 \]
-The issuance session identifier must not enter the presented lane hash: doing
-so would give the issuer a trivial linkage handle.  Session binding belongs in
-the cut-and-choose commitments and challenge, while issuance and presentation
-use the same credential-domain lane hash.  An application-level payload can be
-defined as
+The lane hash used at presentation must not contain the issuance session
+identifier.  Revealing that identifier would immediately link the credential
+to its issuance.  Instead, the session identifier is bound into the branch
+formation and challenge, and both issuance and presentation use the same
+credential hash shown above.  An application can derive one payload from the
+ordered message/tag list:
 \[
  M=H_{\mathrm{final}}(\mathsf{issuer},\mathsf{type},
               (m_i^*,\rho_i^*)_{i=0}^{\kappa-1}).
 \]
 
-\section{Correctness}
+\section{Why honest credentials verify}
 
+The unblinding step cancels most of the noise introduced during issuance.
 For an honestly generated selected branch,
 \[
  \mathbf c_i^*=B_i\mathbf r_i^*+\mathbf e_{2,i}^*+\mathbf u_i^*.
@@ -386,28 +417,88 @@ Consequently,
        \mathbf s_i^T\mathbf e_{2,i}^*
        -\mathbf e_{1,i}^T\mathbf r_i^*\right)+e.
 \end{align*}
-Thus issuance and verification agree whenever the aggregate error does not
-cross a rounding boundary.  Compared with BLNS23, the error contains a sum of
-$\kappa$ lane errors.  Parameters therefore cannot be copied unchanged: the
-noise bound grows at least as $O(\sqrt\kappa)$ for independent errors and as
-$O(\kappa)$ under a worst-case norm bound.  This may require a larger $q$, a
-smaller rounding modulus $p$, or narrower lane distributions.
+The first term is exactly what the verifier computes.  The remaining terms
+are small errors.  Both sides round to the same value unless an error moves
+a coefficient across a rounding boundary.
 
-\section{Rectangle attacks and lane freshness}\label{sec:rectangle}
+Adding lanes also adds their errors.  With independent centered errors, the
+typical noise scale grows as $O(\sqrt\kappa)$; a worst-case bound can grow
+as $O(\kappa)$.  We therefore cannot reuse the BLNS23 parameters without
+checking the new noise bound.  We may need a larger $q$, a smaller rounding
+modulus $p$, or smaller errors in each lane.
 
-The coordinate-wise aggregate MAC is additively separable.  If a valid lane
-input can be reused across issuance sessions, this gives a one-more forgery
-even when every commitment is honestly formed.  Ignore the small correctness
-error momentarily and define
+\section{What cut-and-choose guarantees}\label{sec:cut-and-choose}
+
+Call a branch \emph{openable} if a seed regenerates it and passes every
+formation check.  For a fixed table containing one openable and one malformed
+branch in each of $k$ attacked lanes, a uniformly sampled challenge opens all
+$k$ openable branches with probability $2^{-k}$.  Thus an attempt that passes
+those checks while selecting all $k$ malformed branches has probability
+\[
+ \Pr[\text{accept and select all attacked branches malformed}]=2^{-k}.
+\]
+In particular, a table has at most one challenge that accepts while selecting
+malformed branches in every lane.  Across $q_{\mathrm{chal}}$ classical
+Fiat--Shamir trials, this event has probability at most
+$q_{\mathrm{chal}}2^{-\kappa}$, up to binding failures and challenge bias.
+This bound concerns that event alone; the splicing attack in
+Section~\ref{sec:rectangle} uses only about half the lanes in each malicious
+issuance.
+
+Two successful openings of the same table under different challenges also
+reveal something useful: at least one branch that stayed hidden in the first
+exchange is opened in the second.  The next lemma makes this precise.
+
+\begin{lemma}[Two-fork selected-lane extraction]
+Assuming binding of the global branch commitment, two accepting transcripts
+with the same branch table and distinct binary challenge vectors reveal an
+opening for at least one branch selected in the first transcript, and
+symmetrically for the second.
+\end{lemma}
+
+\begin{proof}
+Choose an index $j$ where the challenges differ.  If the first challenge opens
+$\chi_j$, it selects $1-\chi_j$.  The second challenge opens
+$\chi'_j=1-\chi_j$, revealing the selected branch's seed and hence its witness.
+\end{proof}
+
+This lemma starts with two accepting \emph{transcripts}, meaning records of
+what was sent in the exchanges.  It does not show how to obtain both records
+while answering an attacker that chooses later requests based on earlier
+answers.  It also gives no guarantee that the same lane is revealed in every
+issuance.  A quantum extraction proof would need further work.  The
+interactive variant uses seed tags instead, allowing a classical proof to
+recover witnesses from hash queries.
+
+All branches, lane positions, session data, and the public key must be bound
+before the challenge.  Independent lane keys prevent a direct cancellation
+based on sharing one secret across lanes.  The signer checks all openings
+before producing any secret-dependent output and releases only the aggregate;
+individual lane responses would expose a lane to a single cut-and-choose
+check.  These requirements are part of the construction, not substitutes for
+the aggregate security argument.
+
+\section{Splicing attacks and lane freshness}\label{sec:rectangle}
+
+\subsection{Reusable lane inputs}
+
+Each lane contributes a value that depends only on its own input.  The rounded
+sum, together with the tags, forms the message authentication code (MAC).
+If valid inputs can be reused across issuances, an attacker
+can combine three responses to make a fourth credential.  This breaks
+\emph{one-more unforgeability}: after $Q$ issuances, a user should not be
+able to produce credentials for $Q+1$ distinct messages.  To see the attack,
+first ignore the small rounding error and define
 \[
  F_i(x)=\mathbf s_i^T H_R(x),\qquad
  Y(x_0,\ldots,x_{\kappa-1})=\sum_i F_i(x_i).
 \]
-Here $x_i=(m_i,\rho_i)$ and $Y$ is the value available to the user before final
-rounding.  Fix every coordinate except two, denoted $a$ and $b$, and choose two
-distinct valid inputs $x_a^0,x_a^1$ and $x_b^0,x_b^1$.  Let $Y_{uv}$ denote
-the aggregate with $x_a=x_a^u$ and $x_b=x_b^v$.  Three honest issuance queries
-give
+Here $x_i=(m_i,\rho_i)$ and $Y$ is the user's value before rounding, with
+noise omitted for now.  Keep all lanes fixed except two, called $a$ and $b$.
+Choose two valid inputs for each: $x_a^0,x_a^1$ and $x_b^0,x_b^1$.  These
+choices form four combinations, the corners of a rectangle.  Write $Y_{uv}$
+for the response using choice $u$ in lane $a$ and choice $v$ in lane $b$.
+Three honest issuances give
 \begin{align*}
  Y_{00}&=F_a(x_a^0)+F_b(x_b^0)+K,\\
  Y_{10}&=F_a(x_a^1)+F_b(x_b^0)+K,\\
@@ -444,16 +535,7 @@ not one-more unforgeable: three honest issuance queries produce four
 pairwise-distinct valid vector-message credentials.
 \end{theorem}
 
-The same identity refutes any stronger aggregate-HMLWE assumption that permits
-cross-query reuse of valid coordinate inputs.  Four oracle queries satisfy
-\[
- \widetilde Y_{00}+\widetilde Y_{11}
- -\widetilde Y_{10}-\widetilde Y_{01}
- =\eta_{00}+\eta_{11}-\eta_{10}-\eta_{01},
-\]
-which is small.  For a true random oracle, the left-hand side is uniform in
-$R_q$.  A centered-norm test therefore distinguishes the aggregate oracle from
-random with overwhelming advantage.
+\subsection{Session freshness and balanced splicing}
 
 In the current construction, however,
 \[
@@ -463,17 +545,16 @@ contains a signer-backed, globally unique $\mathsf{sid}$.  Reusing the same
 $x_i=(m_i,\rho_i)$ in a second session would require finding a cross-session
 preimage or collision for $H_\rho$.  The rectangle attack therefore motivates
 a mandatory rule: session identifiers must never repeat within a key epoch,
-and every valid lane input used in the aggregate-HMLWE game must be fresh across
-issuance queries.  The fully honest attack does not prove that a
-freshness-restricted game is secure; it establishes that no theorem without
-the restriction can be true.  A repaired proof must also cover concurrency, rollback, and distributed
-replay-state failures that could violate uniqueness.
+and valid lane inputs must be fresh across issuance queries.  This rule
+excludes the fully honest rectangle but does not establish security.  Its
+enforcement must cover concurrency, rollback, and distributed replay-state
+failures that could violate uniqueness.
 
-Session freshness does not remove every use of the rectangle identity.  A
-selected malformed branch need not claim the old message: because it is never
-opened, its residual can simply copy a previously observed hash coefficient.
-Partition the lanes into $A\mathbin{\dot\cup}B=[\kappa]$.  First obtain an
-honest baseline
+Unique sessions still leave a way to use the same identity.  An attacker
+can put an old hash vector into a malformed branch and try to keep that
+branch unopened.  It need not provide a valid seed for the old input.
+Divide the lanes into two disjoint sets, $A$ and $B$.  First obtain one
+honest baseline response:
 \[
  Y_{00}=\sum_{i\in A}F_i(x_i^0)+\sum_{i\in B}F_i(x_i^0).
 \]
@@ -484,17 +565,23 @@ on the required Fiat--Shamir challenges, the resulting values are
  Y_{10}&=\sum_{i\in A}F_i(x_i^1)+\sum_{i\in B}F_i(x_i^0),\\
  Y_{01}&=\sum_{i\in A}F_i(x_i^0)+\sum_{i\in B}F_i(x_i^1).
 \end{align*}
-Hence $Y_{10}+Y_{01}-Y_{00}=Y_{11}$ as before, although every \emph{valid}
-input is session-fresh.  The second issuance requires selecting $|B|$
-malformed branches and the third requires selecting $|A|$.  A balanced
-partition therefore costs about $2^{\kappa/2}$ classical random-oracle trials,
-or $2^{\kappa/4}$ generic quantum trials.  This is still exponential, but it
-shows that analyzing only the all-$\kappa$-malformed event overstates concrete
-security by a square in the classical ROM and by a fourth-power in the QROM.
+Again, $Y_{10}+Y_{01}-Y_{00}=Y_{11}$, even though every valid input belongs
+to a fresh session.  The attacker needs the second issuance to select the
+$|B|$ malformed branches and the third to select the $|A|$ malformed ones.
+Splitting the lanes as evenly as possible balances these two searches.
+The work is then about $2^{\kappa/2}$ classical random-oracle trials or
+$2^{\kappa/4}$ generic quantum trials.  A security estimate based only on
+hiding malformed branches in all $\kappa$ lanes at once would therefore
+miss this cheaper attack.
 
-The balanced attack is optimal within a natural copy-and-combine class.
-Model each distinct lane coefficient as an independent formal atom and call an
-occurrence a \emph{copy} if the same atom occurred earlier in that lane.
+\subsection{A lower bound for copying and combining responses}
+
+Among attacks that only copy lane values and combine responses by linear
+operations, the balanced attack has the best possible exponent.  To state
+this claim precisely, treat each distinct lane coefficient as a separate
+symbol, called an \emph{atom}.  A later use of the same atom in the same
+lane is a \emph{copy}.  We consider identities that work for every possible
+assignment of values to these symbols.
 
 \begin{theorem}[Half-copy lower bound for formal linear splicing]
 Let $Q\geq2$ issued aggregates be combined with nonzero coefficients
@@ -521,358 +608,185 @@ therefore puts at least
 copies in one issuance.
 \end{proof}
 
-With session-bound validity, such copied atoms must occur in unopened malformed
-branches except with a hash collision.  Thus every formal linear splice fixes
-at least $\kappa/2$ challenge bits in one issuance.  This theorem does not rule
-out lattice-specific attacks using short nontrivial relations among distinct
-hash vectors.  The closed-cycle attack below refutes mfr-AHMLWE even without
-such lattice-specific relations.
+Because valid inputs are bound to their sessions, a copied atom must be in
+an unopened malformed branch unless a hash collision occurs.  The theorem
+therefore forces at least $\kappa/2$ challenge bits in one issuance.  Its
+scope is limited to these formal identities: it does not rule out attacks
+that exploit special algebraic relations between different hash vectors.
 
-\section{Aggregate HMLWE candidates and limits}\label{sec:fr-ahmlwe}
+\section{What the security proof needs}\label{sec:security-targets}
 
-We isolate the exact pseudorandomness property needed after the usual BLNS23
-hybrids have removed the public blinding terms.  This abstraction intentionally
-separates the lattice question from Fiat--Shamir extraction.
+A \emph{reduction} shows how an attacker against the proposed scheme could
+be used to solve an existing hard problem.  It runs the attacker and
+simulates the protocol, using an instance of that hard problem in place of
+some secret information.
 
-Let $G_i:\{0,1\}^*\rightarrow R_q^n$ be independent random oracles, let
-$\mathbf s_i\sample D_s^n$ for $i\in[\kappa]$, and let $D_E$ be the aggregate
-error distribution.  In query $j$, an adaptive adversary submits
+Here the underlying problem is hashed module learning with errors (HMLWE).
+Its real oracle returns a secret inner product at a hashed input, plus a
+small error.  Its ideal oracle returns a random value, consistently on
+repeated inputs.  HMLWE says that an efficient attacker cannot tell these
+oracles apart.  This property is called \emph{pseudorandomness}.
+
+We first study a simpler game that keeps only the sum of the lane
+contributions.  Let $H_i:\{0,1\}^*\rightarrow R_q^n$ be the independent
+random oracles used for the lane hashes, let $\mathbf s_i\sample D_s^n$ be
+the lane secrets, and let $D_E$ sample the aggregate error.  In request $j$,
+the attacker chooses the coefficients $(\mathbf a_{j,i})_i$.  The set $V_j$
+contains the lanes where the reduction knows a hash input $x_{j,i}$ such that
 \[
-  (\mathbf a_{j,0},\ldots,\mathbf a_{j,\kappa-1}),
-  \qquad V_j\subseteq[\kappa],\quad |V_j|>\kappa/2,
+ \mathbf a_{j,i}=H_i(x_{j,i})\qquad(i\in V_j).
 \]
-together with strings $\mu_{j,i}$ for $i\in V_j$.  The query is admissible if
+Each such pair $(i,x_{j,i})$ must be new among accepted issuance requests.
+The attacker can choose the other coefficients freely, using anything it
+learned from earlier answers.  The real aggregate response is
 \[
-  \mathbf a_{j,i}=G_i(\mu_{j,i})\quad(i\in V_j)
+ z_j=\sum_i\mathbf s_i^T\mathbf a_{j,i}+e_j,
+ \qquad e_j\sample D_E;
 \]
-and every pair $(i,\mu_{j,i})$ is fresh among earlier admissible queries.  The
-coordinates outside $V_j$ are arbitrary and may depend on the entire previous
-transcript and on all random-oracle answers seen so far.  The real oracle
-returns
-\[
-  z_j=\sum_{i=0}^{\kappa-1}\mathbf s_i^T\mathbf a_{j,i}+e_j,
-  \qquad e_j\sample D_E,
-\]
-whereas the ideal oracle returns an independent uniform element of $R_q$.
-The \emph{majority-fresh aggregate HMLWE} (mfr-AHMLWE) assumption states that
-these two adaptive experiments are computationally indistinguishable.
-In the protocol, $\mu_{j,i}$ represents the session-bound pair
-$(m_{j,i},\rho_{j,i})$ and $V_j$ is the set of selected branches for which the
-extractor obtains valid witnesses.  A complete reduction must additionally
-show that the real aggregate error is distributed as, or indistinguishable
-from, $D_E$.
+the ideal response is chosen uniformly at random from $R_q$, independently
+of earlier responses.  The attacker's goal is to tell which kind of answers
+it receives.  Its \emph{distinguishing advantage} measures how much its
+output probabilities differ between the two games.
 
-The majority and freshness conditions are stronger than mere uniqueness of the complete
-message vector: it forbids reuse of a valid coordinate under the same lane
-key and requires fewer than half the selected coordinates to be malformed.
-Section~\ref{sec:rectangle} proves both restrictions are necessary for the
-claimed concrete security.  The definition does not
-restrict an arbitrary malformed coordinate from repeating a previous ring
-element; that behavior is deliberately included in the assumption.
+Connecting this game to the full protocol requires more work.  The reduction
+must also simulate the public keys, blinding terms, and response proofs, and
+justify the error distribution $D_E$.  Cryptographic proofs often make these
+changes through a sequence of intermediate games, called \emph{hybrids}.
 
-That last freedom makes the assumption false.  The following attack does not
-reuse a valid hash input and does not depend on the secret keys.
+\subsection{Why one fixed valid lane is enough}\label{sec:fixed-lane}
 
-\begin{theorem}[Closed-cycle distinguisher]
-Suppose $D_E$ is supported, except with probability $\delta_E$, on a centered
-set $\mathcal E\subset R_q$ such that the three-fold sumset
-$3\mathcal E=\mathcal E+\mathcal E+\mathcal E$ occupies a negligible fraction
-of $R_q$.  Then majority-fresh aggregate HMLWE is distinguishable with
-advantage at least
-\[
- 1-3\delta_E-\frac{|3\mathcal E|}{|R_q|}.
-\]
-More generally, every fixed validity threshold $\tau<1$ is vulnerable using a
-constant number of aggregate queries.
-\end{theorem}
+The reduction knows all lane keys except one.  For that lane, it asks its
+HMLWE oracle for the required contribution and adds the other contributions
+it can compute itself.  This works whenever the selected input in that lane
+is hash-derived and its hash input is known.
 
-\begin{proof}
-For the majority case (and the cryptographic regime $\kappa\geq5$), partition
-the lanes into three sets
-$P_1\mathbin{\dot\cup}P_2\mathbin{\dot\cup}P_3=[\kappa]$ of nearly equal
-size.  Before making any aggregate query, query the random oracles on fresh
-messages and obtain $a_{j,i}=G_i(\mu_{j,i})$ for every $i\notin P_j$.  For the
-malformed coordinates $i\in P_j$, set
-\[
- a_{j,i}=-\sum_{\ell\ne j}a_{\ell,i}.
-\]
-This is well defined because lane $i\in P_j$ is valid in the other two
-queries, whose random-oracle values are already known.  Query $j$ uses
-$V_j=[\kappa]\setminus P_j$, so more than half its coordinates are valid and
-every marked message is fresh.  Nevertheless, for every lane $i$,
-\[
- a_{1,i}+a_{2,i}+a_{3,i}=0.
-\]
-Thus the sum of the three real answers is merely $e_1+e_2+e_3\in3\mathcal E$
-except with probability at most $3\delta_E$.  The sum of three independent
-ideal answers is uniform in $R_q$.  Testing membership in $3\mathcal E$ gives
-the claimed advantage.
-
-For a fixed threshold $\tau<1$, choose a constant
-$Q>1/(1-\tau)$ and sufficiently large $\kappa$, partition the lanes into $Q$
-nearly equal sets, and perform the same construction with
-$a_{j,i}=-\sum_{\ell\ne j}a_{\ell,i}$ for $i\in P_j$.  Each query has valid
-fraction at least $1-\lceil\kappa/Q\rceil/\kappa>\tau$, while the sum of all
-$Q$ keyed terms is
-zero.  The same small-sum test distinguishes, assuming the $Q$-fold aggregate
-error remains concentrated in a negligible fraction of $R_q$.
-\end{proof}
-
-The theorem refutes mfr-AHMLWE as defined; it is not merely a missing reduction
-to ordinary MLWE.  It does \emph{not} immediately give a protocol attack.  In
-the protocol, every pair commitment is fixed before Fiat--Shamir chooses which
-honest branch remains unopened.  The abstract game instead lets the adversary
-prequery the hashes and directly submit the final selected coefficient tuple.
-Any replacement assumption must preserve this commit--challenge--open causal
-order, bind both branches globally, and include the one-more verification
-target.  Calling such a transcript-aware game ``aggregate HMLWE'' would be a
-new protocol-specific assumption rather than the simple oracle assumption
-above.
-
-\subsection{A transcript-causal candidate}
-
-The natural response-only repair is the following idealized experiment.  In
-issuance query $j$, the adversary first fixes a unique session identifier and
-two coefficient vectors
-\[
-  (\mathbf a_{j,i,0},\mathbf a_{j,i,1})\qquad(i\in[\kappa])
-\]
-under one binding global digest $C_j$.  Only then is
-$\boldsymbol\chi_j=H_{\mathrm{chal}}(\mathsf{sid}_j,C_j)$ sampled.  The
-adversary must open branch $\chi_{j,i}$ in every lane and prove that it is an
-admissible hash-derived coefficient with the prescribed session binding.  If
-all openings verify, the real experiment returns
-\[
- z_j=\sum_i\mathbf s_i^T\mathbf a_{j,i,1-\chi_{j,i}}+e_j;
-\]
-the response-only ideal experiment returns an independent uniform element of
-$R_q$.  Discarded candidate digests still count among the adversary's
-$q_{\mathrm{chal}}$ random-oracle queries.  Hash-derived selected coefficients
-are required to use globally fresh lane labels.  We call indistinguishability
-of these experiments \emph{transcript-causal aggregate HMLWE}
-(tc-AHMLWE).
-
-This definition deliberately binds the alternatives rather than accepting a
-post-challenge selected tuple.  It also remains only a candidate assumption:
-the fixed-lane reductions below do not prove it.
-
-\begin{lemma}[The closed cycle becomes a full-challenge fixed point]
-Consider the three-query closed-cycle construction above, with each branch
-coefficient fixed under a binding digest before its challenge.  Except for a
-collision between the two hash-derived alternatives in a lane, any causal
-realization of the cycle fixes all $\kappa$ challenge bits of the query whose
-challenge is sampled last.  Its success probability is therefore at most
-$q_{\mathrm{chal}}2^{-\kappa}$, plus the binding and hash-collision
-probabilities.
+\begin{lemma}[Fixed valid lane]
+Suppose a fixed index $i^*$ belongs to $V_j$ in every aggregate query.  Then
+the restricted aggregate game reduces to ordinary HMLWE for lane $i^*$.
 \end{lemma}
 
 \begin{proof}
-Let query $\ell$ be challenged last.  In every lane
-$i\in P_\ell$, its own selected branch must be the already fixed malformed
-branch, fixing $\chi_{\ell,i}$.  If $i\notin P_\ell$, another query $j$ is the
-unique malformed query in that lane.  The fixed value
+Use the unknown HMLWE secret as the key for lane $i^*$, and generate the
+other lane keys locally.  On request $j$, the label $x_{j,i^*}$ has not been
+used in an earlier accepted request.  Obtain
+$b_j=\mathbf s_{i^*}^T H_{i^*}(x_{j,i^*})+e_j$ from the HMLWE oracle and return
 \[
- \mathbf a_{j,i}=-\sum_{r\ne j}\mathbf a_{r,i}
+ b_j+\sum_{i\ne i^*}\mathbf s_i^T\mathbf a_{j,i}.
 \]
-already contains one particular alternative from query $\ell$.  For the
-cycle identity to survive, query $\ell$ must select that alternative, again
-fixing $\chi_{\ell,i}$.  Thus every bit of
-$\boldsymbol\chi_\ell$ is prescribed.  A fresh random-oracle challenge hits
-that vector with probability $2^{-\kappa}$; a union bound over candidate
-digests gives the claim.
+With a real HMLWE oracle, this is exactly the real aggregate response.  With
+an ideal oracle, $b_j$ is a fresh uniform value.  Adding the other
+contributions leaves the result uniform.  Even malformed inputs in the
+other lanes can be handled because the reduction knows those lane keys.
 \end{proof}
 
-The lemma explains precisely why the non-causal distinguisher is not an
-immediate protocol attack.  It does not prove tc-AHMLWE: other adaptive
-relations need not have the same closed-cycle form.
+\begin{corollary}[All lanes valid]
+If $V_j=[\kappa]$ in every query, the aggregate game reduces to ordinary
+HMLWE, and hence to MLWE in the random-oracle model by BLNS23 Lemma~4.3.
+\end{corollary}
 
-There is a second, structural obstruction to a conventional HMLWE proof.
-Giving a reduction an evaluation oracle for
+\begin{proof}
+Choose any fixed lane and apply the lemma.
+\end{proof}
+
+The same lane must work throughout the entire issuance history.  For example,
+if the reduction uses lane 2, it needs lane 2 to stay valid in every accepted
+request.  A request that is valid only in lane 3 does not help it: it knows
+lane 3's key already, but still cannot compute an arbitrary input under lane
+2's unknown key.  The HMLWE oracle accepts hash inputs, not arbitrary
+coefficient vectors.  Section~\ref{sec:interactive} explains how the
+four-message variant keeps one fixed lane usable across all issuances.
+
+\subsection{The two security goals for the two-message proposal}
+
+The first goal is to show that the aggregate responses look random.  The
+game must follow the real protocol's order: the attacker commits first, and
+only then learns the challenge.  In request $j$, it fixes a unique session
+identifier and all branch coefficients
 \[
- F(x_0,\ldots,x_{\kappa-1})
-   =\sum_i\mathbf s_i^T H_i(x_i)
+ (\mathbf a_{j,i,0},\mathbf a_{j,i,1})\qquad(i\in[\kappa])
 \]
-cannot be pseudorandom on the complete-vector domain.  Four evaluation queries
-distinguish it by the rectangle identity
-$F_{00}+F_{11}-F_{10}-F_{01}=0$ (up to correctness noise).  The real keyed
-verifier, however, exposes only an equality predicate on a guessed rounded
-value, not the value $F(\mathbf x)$ itself.  Consequently, a game strong enough
-to support the one-more proof must combine causal issuance responses with this
-equality-only verification interface and must bound the probability of
-producing $Q+1$ accepting, pairwise-distinct vector credentials after $Q$
-accepted issuances.  This is a one-more hidden-linear-function assumption,
-closer in character to a new one-more assumption than to BLNS23's ordinary
-HMLWE assumption.  Proving response-only tc-AHMLWE would not by itself settle
-that one-more game.
+under one binding global digest $C_j$.  The challenge is then
+$\boldsymbol\chi_j=H_{\mathrm{chal}}(\mathsf{sid}_j,C_j)$.
+The attacker opens branch $\chi_{j,i}$ in every lane.  The verifier checks
+that each opened branch was formed correctly for this session.  If all
+openings pass, the real game returns
+\[
+ z_j=\sum_i\mathbf s_i^T\mathbf a_{j,i,1-\chi_{j,i}}+e_j,
+\]
+while the ideal game returns a fresh uniform ring element.  Hash-derived
+selected inputs must use fresh labels in their lanes.  All challenge-hash
+queries count toward $q_{\mathrm{chal}}$, including attempts the attacker
+discards.  We call this goal \emph{transcript-causal aggregate HMLWE}
+(tc-AHMLWE); ``transcript-causal'' means that the game respects the order of
+the exchange.  This goal remains unproved for the two-message proposal.
 
-For precision, call the resulting experiment
-\emph{transcript-causal one-more hidden linear functions} (tc-OMHLF).
-It samples the lane secrets, gives the adversary the causal issuance interface
-above, and gives it only the keyed predicate
+The second goal is to prevent extra credentials.  Random-looking issuance
+responses alone are not enough, because the function
+\[
+ F(\mathbf x)=\sum_i\mathbf s_i^T H_i(x_i)
+\]
+still has the rectangle relation from Section~\ref{sec:rectangle}.  The
+security game must also model the verifier's actual interface: it accepts or
+rejects a proposed credential without revealing the correct value of $F$.
+
+We call this second game \emph{transcript-causal one-more hidden linear
+functions} (tc-OMHLF).  It lets the attacker make issuance requests in the
+order above and test proposed credentials with
 \[
  \mathsf{Check}(\mathbf x,v)=
  \left[v=\roundp{\sum_i\mathbf s_i^T H_i(x_i)}\right].
 \]
-After at most $Q$ accepted issuance queries, the adversary wins by producing
-$Q+1$ pairwise-distinct vectors $\mathbf x^{(r)}$ and values $v^{(r)}$ for
-which $\mathsf{Check}$ accepts.  Individual lane inputs may repeat among output
-vectors: prohibiting that would weaken the ordinary one-more credential
-definition and simply define away rectangle splicing.  The tc-OMHLF
-assumption is that every polynomial-time adversary has negligible winning
-probability, with its Fiat--Shamir query count included in the concrete
-advantage.  This is an explicit and falsifiable assumption, but it is close to
-the desired security property of the underlying aggregate MAC; it must not be
-advertised as a reduction to MLWE.
+After at most $Q$ accepted issuances, the attacker wins by producing $Q+1$
+distinct vectors $\mathbf x^{(r)}$, each with a value $v^{(r)}$ that passes
+$\mathsf{Check}$.  Individual lane inputs may repeat between these vectors.
+Allowing this reuse is necessary to cover splicing attacks.
 
-\begin{lemma}[Fixed honest lane special case]
-Suppose there is an index $i^*$ such that $i^*\in V_j$ in every aggregate
-query.  Then the fixed-lane restriction of the aggregate game reduces to
-ordinary HMLWE for lane $i^*$, with a factor
-at most $\kappa$ if the reduction must guess $i^*$.
-\end{lemma}
+We could assume directly that winning this game is infeasible, but that would
+be a new assumption specific to this protocol.  We do not have a reduction
+from ordinary HMLWE for the two-message game.  Formally, the desired winning
+probability is \emph{negligible}: as $\lambda$ grows, it eventually becomes
+smaller than $\lambda^{-c}$ for every fixed positive constant $c$.
 
-\begin{proof}
-Embed the HMLWE secret in lane $i^*$ and sample every other lane secret
-locally.  On query $j$, freshness gives a new HMLWE message
-$\mu_{j,i^*}$.  Obtain
-$b_j=\mathbf s_{i^*}^TG_{i^*}(\mu_{j,i^*})+e_j$ from the HMLWE oracle and
-return
-\[
- b_j+\sum_{i\ne i^*}\mathbf s_i^T\mathbf a_{j,i}.
-\]
-This is a perfect real simulation.  If $b_j$ is uniform, adding the locally
-computed term preserves uniformity and gives the ideal experiment.  The
-arbitrary coordinates cause no simulation problem because their corresponding
-secrets were sampled by the reduction.
-\end{proof}
+\section{A four-message variant}
+\label{sec:interactive}
 
-\begin{corollary}[All lanes valid]
-If $V_j=[\kappa]$ in every query, the aggregate game reduces to ordinary HMLWE (and
-hence, in the random-oracle model, to MLWE by BLNS23 Lemma~4.3).
-\end{corollary}
+Here the signer chooses the challenge after the user commits.  We combine
+the parallel-instance argument of Chairattana-Apirom et al.~\cite{PCC22}
+with the fixed-lane lemma from Section~\ref{sec:fixed-lane}.  The aim is to
+keep one lane valid for every accepted request.  That proves a result for
+the simplified response game.  To extend the argument to extra credentials,
+we then bind all lanes to one hidden message.
 
-\begin{proof}
-Choose any fixed lane $i^*$ and apply the preceding lemma.  This route is
-preferable to treating the concatenation of all lane hashes as one atomic
-random oracle: the adversary may query the component random oracles separately
-before deciding which values to combine.
-\end{proof}
+\subsection{Recovering seeds and limiting cheating attempts}
 
-Outside the fixed-lane cases, a reduction that embeds its unknown HMLWE secret
-in lane $i$ must answer queries in which $i\notin V_j$ and
-$\mathbf a_{j,i}$ is adversarially chosen.  This requires the unavailable value
-$\mathbf s_i^T\mathbf a_{j,i}$; an ordinary HMLWE oracle only evaluates fresh
-hashed inputs.  The closed-cycle attack shows that granting all such final
-tuples at once is too strong, while the protocol-specific causal restriction
-is not captured by standard HMLWE.
-
-\subsection{Conditional-entropy barrier to a joint MLWE reduction}
-
-It is tempting to concatenate the component secrets as
-$\mathbf S=(\mathbf s_0,\ldots,\mathbf s_{g-1})$ and regard a response as the
-single MLWE sample
-\[
- z_j=\mathbf S^T\mathbf A_j+e_j,
- \qquad
- \mathbf A_j=(\mathbf a_{j,0,1-\chi_{j,0}},\ldots,
-                    \mathbf a_{j,g-1,1-\chi_{j,g-1}}).
-\]
-This algebraic rewriting is exact, but the distribution of $\mathbf A_j$ is
-not the coefficient distribution in ordinary MLWE.  The following elementary
-calculation isolates the obstruction.
-
-\begin{lemma}[Post-commitment support bound]
-Fix the complete table of two branch coefficients in each of $g$ components,
-the session data, and the binding digest.  Over the remaining random-oracle
-challenge, the selected concatenated coefficient $\mathbf A_j\in
-(R_q^n)^g$ has support of size at most $2^g$.  Hence, writing $d$ for the
-ring degree and $U$ for the uniform distribution on $(R_q^n)^g$, for every
-$\alpha>1$ its exponentiated R\'enyi divergence satisfies
-\[
- R_\alpha(\mathsf{Law}(\mathbf A_j\mid\mathsf{table})\Vert U)
- \geq \frac{q^{dng}}{2^g}.
-\]
-The conditional min-entropy is at most $g$ bits.
-\end{lemma}
-
-\begin{proof}
-Every challenge vector in $\{0,1\}^g$ selects one tuple from the fixed table,
-so the support bound is immediate.  For a distribution $P$ with support size
-at most $N$ on a universe of size $M$, convexity gives
-$\sum_xP(x)^\alpha\geq N^{1-\alpha}$.  Therefore
-\[
- R_\alpha(P\Vert U)
- =M\left(\sum_xP(x)^\alpha\right)^{1/(\alpha-1)}
- \geq M/N.
-\]
-Substitute $M=|(R_q^n)^g|=q^{dng}$ and $N=2^g$.
-\end{proof}
-
-Bai et al.~\cite{BLLSS15} prove hardness for non-uniform and even correlated
-LWE coefficient rows when their joint distribution has sufficiently small
-R\'enyi divergence from uniform.  Applied after the branch table is exposed,
-their reduction loses a factor at least $q^{dng}/2^g$ already for one row and
-is vacuous here.  Entropic M-LWE results such as~\cite{Boudgoust22} concern
-entropy in the \emph{secret} distribution and search M-LWE; they do not turn a
-challenge selector with $g$ conditional bits into a uniform coefficient row.
-There is precedent for stopping at an explicit related-samples assumption:
-Banerjee, Peikert, and Rosen~\cite{BPR12} introduced an interactive
-related-samples LWE/LWR assumption when adversarial relations among sample
-vectors fell outside their standard-LWE proof.  Their relations are
-subset-products rather than cut-and-choose tables, so their assumption does
-not imply tc-AHMLWE; the comparison clarifies the status of tc-AHMLWE as a new
-related-samples assumption rather than a renamed standard MLWE instance.
-
-This lemma is only a reduction barrier, not an attack.  In particular it also
-holds for an all-honest branch table, while the all-honest case is proved above
-by embedding one HMLWE lane.  Equivalently, a simulator can sometimes sample
-the public table \emph{around} an externally supplied uniform coefficient and
-program the random-oracle challenge.  The missing theorem must show how to do
-that when malformed branches were chosen adaptively as functions of both
-preobserved alternatives and earlier transcripts.  Merely conditioning on the
-table and invoking non-uniform LWE, or merely observing high unconditional
-entropy before the table is revealed, does not establish tc-AHMLWE.
-
-\subsection{Why Subspace LWE does not directly close the gap}
-
-Subspace LWE~\cite{Pietrzak12} is a tempting candidate because it permits
-adaptive affine transformations of an LWE secret and sample vector and reduces
-the resulting problem to ordinary LWE when the transformations retain
-sufficient rank.  Its ordering is different in the crucial place: the
-adversary chooses the affine maps and the oracle then samples a fresh uniform
-vector.  Here the user may first obtain both random-oracle branch vectors and
-then choose every malformed branch as a function of them.  After the digest is
-fixed, the only fresh randomness is the $\kappa$-bit branch selector, not a
-fresh uniform module vector independent of that function.  Consequently the
-Subspace-LWE theorem cannot be invoked for tc-AHMLWE without a new reduction
-that handles source-dependent maps and binary selection between preobserved
-module vectors.
-
-\subsection{A provable restriction with an unpredictable challenge}
-\label{sec:unpredictable-repair}
-
-There is a standard-HMLWE proof route if round optimality is relaxed.  The
-following variant combines the parallel-instance argument of
-Chairattana-Apirom et al.~\cite{PCC22} with the fixed-lane lemma above.
-
-First add an extractable seed tag to every branch,
+First, attach a hash of the seed to every branch:
 \[
  d_{r,i,b}=H_{\mathrm{seed}}(\mathsf{sid}_r,i,b,z_{r,i,b}),
 \]
-and bind every $(d_{r,i,b},\mathbf c_{r,i,b})$ under the global digest.  The
-selected tag and coefficient are transmitted; every other branch is opened by
-its seed.  In the classical ROM, a reduction searches the
-$H_{\mathrm{seed}}$ query list for the selected tag and thereby obtains the
-selected witness.  A branch is \emph{known-valid} if this preimage query
-occurred before the digest was fixed and the derived branch passes the complete
-formation relation.
+and bind every tag $d_{r,i,b}$ together with its branch vector
+$\mathbf c_{r,i,b}$ under the global digest.  The user sends the selected tag and vector,
+and opens every other branch by revealing its seed.
 
-Use $g$ independent component keys.  The atomic counter $r$ advances on every
-initiated interaction, including an abort.  Prepare $A_r$ branches per
-component, commit to all of them, and only then
-let the signer sample an independent uniform selected index
-$J_{r,i}\in[A_r]$ for every component.  All branches except $J_{r,i}$ are
-opened.  Choose a schedule satisfying
+In the classical ROM, the reduction can observe the attacker's hash queries.
+It searches that history for the selected tag, recovers the seed, and
+reconstructs the branch.  This is why we call the tag \emph{extractable}.
+The real signer has no such access to the user's hash queries, so the selected
+seed stays private.  A branch is \emph{known-valid} if the seed appeared in
+a hash query before the digest was fixed and expanding it passes every
+formation check.
+
+Use $g$ lanes, also called \emph{components}, with independent keys.  Let
+$q_{\max}$ be the maximum number of interactions started within one key
+epoch.  A counter $r$ advances whenever an interaction starts, including
+ones that later abort.  Counter updates must be atomic so that concurrent
+requests cannot reuse a value.
+
+In interaction $r$, prepare $A_r$ branches per lane and commit to all of
+them.  The number of branches per lane is called the \emph{arity}.  Only
+after receiving the commitment does the signer choose an independent uniform
+selected index $J_{r,i}\in[A_r]$ for each lane.  All other branches are
+opened.  We choose the arity schedule so that the sum of the per-attempt
+cheating probabilities stays small:
 \[
  \sum_{r=1}^{q_{\max}}\frac1{A_r}\leq\frac1{3\vartheta};
  \qquad
@@ -880,9 +794,16 @@ opened.  Choose a schedule satisfying
    3\vartheta\ln(q_{\max}+1)(r+1)
  \right\rceil
 \]
-is one such schedule.  Call the event that an accepted interaction selects a
-branch that is not known-valid in component $i$ a \emph{cheat in component
-$i$}.
+The displayed choice of $A_r$ satisfies this bound.  The parameter
+$\vartheta>1/3$ controls how small the bound is.  Increasing the arity over
+time makes each later attempt less likely to hide a malformed branch.
+A sufficiently large fixed arity would also work if $q_{\max}$ is known.
+
+Call an accepted request a \emph{cheat in component $i$} if its selected
+branch in that lane is not known-valid.  An \emph{untouched} component is
+one where no such cheat occurs during the whole history.  The next lemma
+bounds the chance that the attacker cheats in every lane at least once.
+Aborting after seeing a challenge still consumes the counter value.
 
 \begin{lemma}[Untouched component]
 Let $\vartheta>1/3$.  In the
@@ -896,31 +817,45 @@ binding failures.
 \end{lemma}
 
 \begin{proof}
-Fix an interaction and all state before the signer samples its index vector.
-If the signer will accept, at most one branch in a component can fail to be
-known-valid: every nonselected branch is opened and checked.  The conditional
-probability of selecting that branch is therefore at most $1/A_r$.  Hence the
-event that a fixed component is ever cheated is dominated by the event that
-at least one of independent Bernoulli variables with parameters $1/A_r$ is
-one.  Its probability is at most
+Consider the fixed branch table just before the signer chooses its indices.
+Except for extraction or binding failures, a request can pass only if each
+lane has at most one branch that is not known-valid: all other branches must
+be opened and checked.  A successful cheat must leave that one branch hidden,
+which happens with probability at most $1/A_r$.
+
+To bound the total risk in one lane, compare these attempts with independent
+trials that succeed with probability $1/A_r$ in interaction $r$.  These
+trials can only overestimate the chance of a successful cheat.  The chance
+that at least one succeeds is
 \[
  1-\prod_r(1-1/A_r)\leq\sum_r1/A_r\leq1/(3\vartheta).
 \]
-This domination remains valid for an adaptive adversary: before each fresh
-index vector is sampled, the identity of the sole branch that could produce
-an accepted cheat is already fixed.  If there is no such branch, fix an
-arbitrary canonical branch only for the dominating experiment.  The indicator
-that the fresh index hits this previsible branch is an independent Bernoulli
-variable even when its identity depends on the preceding transcript.  The
-challenge coordinates use independent random tapes, so the dominating
-ever-hit events are independent across the $g$ components.  Their intersection
-has probability at most
-$(3\vartheta)^{-g}$.  Random-oracle extraction and binding failures add
-$\varepsilon_{\mathrm{ext}}$.
+This comparison still works when the attacker adapts to earlier answers.
+Before each challenge, mark the branch whose selection could produce an
+accepted cheat.  If there is no such branch, mark any fixed branch for the
+comparison alone.  Selecting the marked branch counts as a success in the
+comparison even when the real request would be rejected.
+
+Each fresh index hits its marked branch with probability $1/A_r$, whatever
+the earlier history.  The indices in different lanes are sampled
+independently.  Thus the comparison trials are independent across lanes and
+interactions, and their chance of hitting every lane at least once is at
+most $(3\vartheta)^{-g}$.  Extraction and binding failures contribute the
+additional term $\varepsilon_{\mathrm{ext}}$.
 \end{proof}
 
-Define \emph{uc-AHMLWE} exactly as response-only tc-AHMLWE, except that it uses
-the interactive unpredictable challenge and scheduled arities above.
+\subsection{Why the aggregate can look random}
+
+Call the response-only game for this variant \emph{uc-AHMLWE}, where ``uc''
+stands for unpredictable challenge.  It uses the $g$ lanes, seed tags, arity
+schedule, and signer-chosen indices just described.  Valid selected labels
+must be new among accepted issuances.  In the ideal game, each accepted
+aggregate response is replaced by an independent uniform ring element.
+
+The untouched-component lemma lets us use the fixed-lane reduction.  The
+bound below adds the loss from choosing a lane to the chance that no lane
+stays untouched.  The notation $\operatorname{Adv}$ denotes distinguishing
+advantage.
 
 \begin{theorem}[Unpredictable-challenge aggregate HMLWE]
 For every classical distinguisher $\mathcal A$ against uc-AHMLWE, there is an
@@ -936,39 +871,66 @@ BLNS23 Lemma~4.3.
 \end{theorem}
 
 \begin{proof}
-Except on the bad event of the preceding lemma, at least one component is
-untouched, so every selected branch in that component is known-valid in every
-accepted interaction.  Partition such transcripts by their first untouched
-component.  For one part of the partition, embed the HMLWE challenge secret in
-that component and sample all other component secrets locally.  If the
-embedded component is ever cheated in, abort; otherwise its extracted seed
-supplies a fresh HMLWE input and all public blinding terms.  Add the locally
-computed contributions of the other components exactly as in the fixed-lane
-lemma.  A real HMLWE oracle gives the real aggregate response, while a uniform
-HMLWE oracle makes the whole sum uniform.  The partition loses a factor at
-most $g$, and removing the bad event from both experiments costs at most twice
-its probability.
+Unless the preceding lemma's bad event occurs, at least one lane is
+untouched.  In that lane, every selected branch of an accepted request is
+known-valid.  Group these histories by the lowest-index untouched lane.
+For one such group, place the HMLWE challenge in that lane and generate all
+other keys locally.  If that lane is ever cheated in, abort the simulation.
+Otherwise, its extracted seed gives a fresh input for the HMLWE oracle.
+
+Add the other lanes' contributions as in the fixed-lane lemma.  A real
+oracle produces the real aggregate response; an ideal oracle makes the sum
+uniform.  Splitting histories into at most $g$ groups costs a factor of at
+most $g$.  Excluding the bad event from both games costs at most twice its
+probability, giving the stated bound.
 \end{proof}
 
-The same restriction can support a one-more argument, but only after binding
-all components to one hidden credential message.  Let $\mathsf{Com}$ be a
-binding, hiding, publicly rerandomizable commitment and set
+\subsection{Binding all lanes to one message}\label{sec:common-message}
+
+A new message vector need not contain a new input in our fixed lane.  The
+rectangle attack illustrates the problem: it forms a new combination using
+only inputs that have already appeared.  To rule out extra credentials by
+the fixed-lane argument, we need a new output message to require a new hash
+input in that lane.
+
+We obtain this property by making all lanes refer to the same hidden message
+$M$.  Use a commitment $\mathsf{Com}$ with three properties: it hides $M$;
+it cannot be opened to two different messages (\emph{binding}); and anyone
+can rerandomize it without knowing $M$, while preserving the committed
+message.  Write $\phi_0$ for its initial randomness and set
 \[
  \mu_0=\mathsf{Com}(M;\phi_0),\qquad
  \mu_{i,b}=\mathsf{Translate}(\mu_0;\Delta_{i,b})
            =\mathsf{Com}(M;\phi_0+\Delta_{i,b}),
 \]
-where $\Delta_{i,b}$ is derived from the branch seed.  Replace the lane hash by
-$H_i(\mu_{i,b},\rho_{i,b})$.  An opening checks translation from the common
-$\mu_0$ without revealing $M$.  A presented credential contains
-$M$, $\phi_i=\phi_0+\Delta_{i,J_i}$, $\rho_i$, and the rounded aggregate tag.
-Binding implies that credentials on distinct messages have distinct
-$\mu_i$ in every component.  Thus $Q+1$ pairwise-distinct output messages
-after $Q$ accepted issuances contain a fresh HMLWE point in the untouched
-component.  The BLNS23 final-game min-entropy argument then bounds an
-equality-verification guess by $q_V2^{-h}$, where $h$ is the min-entropy of a
-rounded uniform ring element.  Subject to commitment binding, correctness,
-and the standard BLNS23 hybrids, this gives the conditional bound
+where the branch seed determines $\Delta_{i,b}$, the change to the commitment's
+randomness.  The seed also determines the lattice witnesses.  Branches now contain
+commitments to the same message, instead of separately generated messages.
+The global digest includes $\mu_0$, and the lane hash becomes
+$H_i(\mu_{i,b},\rho_{i,b})$.
+
+When a branch is opened, the signer checks that its commitment is the
+required rerandomization of $\mu_0$.  It can do this without learning $M$.
+At presentation, the user reveals $M$, the selected commitment randomness
+$\phi_i=\phi_0+\Delta_{i,J_i}$, the tags $\rho_i$, and the rounded aggregate
+value.  The verifier reconstructs each $\mu_i=\mathsf{Com}(M;\phi_i)$ and
+checks the aggregate using $H_i(\mu_i,\rho_i)$.  The selected branch seeds
+stay private.
+
+Binding means the same commitment cannot open to two different messages.
+So credentials for distinct messages must have distinct $\mu_i$ in every
+lane, including the untouched one.  After $Q$ accepted issuances, at most
+$Q$ HMLWE inputs in that lane have received issuance evaluations.  Producing
+credentials for $Q+1$ distinct messages must require at least one new
+evaluation.  The attacker may already know the public hash at that input;
+what it lacks is the secret-key evaluation.
+
+In the final ideal game, that missing evaluation is random.  The BLNS23
+argument bounds the chance of guessing its rounded value by $q_V2^{-h}$,
+where $q_V$ is the number of verification attempts.  Here $h$ is an entropy
+bound, not the response polynomial: no rounded value has probability greater
+than $2^{-h}$.  Assuming commitment binding, correctness, and the remaining
+BLNS23 simulation steps, this gives
 \[
  \operatorname{Adv}_{\mathrm{OM}}(\mathcal A)
  \leq
@@ -977,333 +939,116 @@ and the standard BLNS23 hybrids, this gives the conditional bound
  +\operatorname{Adv}_{\mathrm{bind}}+q_V2^{-h}
  +\varepsilon_{\mathrm{hyb}}+\varepsilon_{\mathrm{corr}}.
 \]
-This common-message commitment is essential: without it, $Q+1$ distinct
-message vectors need not contain a fresh coordinate in any fixed component,
-which is exactly the four-corner obstruction.
+The terms $\operatorname{Adv}_{\mathrm{bind}}$,
+$\varepsilon_{\mathrm{hyb}}$, and $\varepsilon_{\mathrm{corr}}$ account for
+breaking commitment binding, distinguishing the intermediate simulations,
+and correctness failures.  These parts still need to be established for a
+concrete protocol.  The common-message commitment supplies the counting step:
+an extra distinct message forces a new input in the fixed lane.
 
-\paragraph{Why this theorem does not prove the Fiat--Shamir scheme.}
-For a signer-sampled index, a cheat in one component has probability
-$1/A_r$.  With Fiat--Shamir, the user can try $q_{\mathrm{chal}}$ candidate
-digests and raise this to approximately
-$\min\{1,q_{\mathrm{chal}}/A_r\}$.  If $A_r$ and $g$ are polynomial, a
-polynomial adversary can target every component using polynomially many
-discarded digests.  The untouched-component lemma is therefore false for the
-current round-optimal challenge.  The theorem applies only with an
-unpredictable post-commitment signer challenge, an explicit bound absorbed
-into super-polynomial arity, or a separate unbiasable hidden-selection
-primitive.  The first option adds a challenge/opening round; the second is
-impractical; the third is an additional cryptographic mechanism.
+\subsection{What this result covers and what it costs}
 
-\subsection{Why chosen-input leakage does not rescue Fiat--Shamir}
+Issuance now takes four messages: commit to the table, receive the signer's
+challenge, send the openings, and receive the response and proof.  Every
+started interaction consumes a counter value, including abandoned attempts.
+The extraction argument observes classical hash queries; extending it to
+quantum queries requires a separate theorem.
 
-One might try to extend the fixed-lane reduction with an oracle that answers a
-bounded number of malformed coefficients under the embedded secret.  The
-Fiat--Shamir protocol permits enough such events to defeat this proof strategy.
+The signer must choose the challenge after the user commits.  If we replace
+this step with Fiat--Shamir, the user can try $L$ candidate digests locally.
+Its chance of selecting a malformed branch in one lane rises from $1/A_r$
+to $1-(1-1/A_r)^L$.  The user can repeat this search for each lane, and the
+signer never sees the discarded attempts.  When the arity is polynomial,
+polynomially many trials suffice to target every lane this way.
 
-\begin{lemma}[Polynomial lane coverage]
-For arity $A$ and $g$ component keys, a classical user can produce accepted,
-session-fresh transcripts in which every component is selected malformed at
-least once using at most
-\[
- q_{\mathrm{chal}}
- =g\left\lceil A\bigl(\lambda\ln2+\ln g\bigr)\right\rceil
-\]
-Fiat--Shamir trials, except with probability $2^{-\lambda}$.  Every submitted
-transcript needs only one malformed component.
-\end{lemma}
+This is not itself a forgery.  It does, however, remove the guarantee that
+one lane stays untouched.  The four-message proof therefore does not transfer
+to the Fiat--Shamir proposal.
 
-\begin{proof}
-For component $i$, prepare one malformed branch and $A-1$ openable branches;
-make every branch openable in all other components.  A candidate digest is
-accepted with the malformed branch selected in component $i$ with probability
-$1/A$.  After $L$ independent candidates, failure for that component is at
-most
-\[
- (1-1/A)^L\leq e^{-L/A}.
-\]
-Set $L=\lceil A(\lambda\ln2+\ln g)\rceil$ and apply a union bound over the $g$
-components.  Only the successful candidate for each component is submitted to
-the signer, so signer-side commitment replay checks do not observe the
-discarded trials.
-\end{proof}
+To complete the one-more proof, we still need a concrete commitment scheme,
+the public-key and response-proof simulations, and the correctness bound.
+We must also prove blindness separately.  The extra tags, commitments,
+openings, and changing branch counts have costs that are not included in the
+two-message proposal's size estimates.
 
-For binary lanes, coverage therefore costs only polynomial work (about
-$2g$ trials in expectation, or the displayed larger bound for
-$2^{-\lambda}$ failure).  This is not a forgery: the honest components still
-mask each response.  It does show that a reduction cannot choose one embedded
-lane and assume that it remains hash-derived throughout all polynomially many
-issuances.
+\section{Why privacy may hold, and what remains to prove}
 
-The natural oracle extension is itself false for polynomial leakage.  Define
-$\ell$-chosen-input HMLWE as ordinary HMLWE augmented in both the real and
-ideal experiments by at most $\ell$ queries
-\[
- \mathcal L_{\mathbf s}(\mathbf a,\nu)
-   =\mathbf s^T\mathbf a+e_\nu,
- \qquad e_\nu\sample D_E,
-\]
-where labels $\nu$ are fresh.  Only the hashed oracle is switched from real to
-uniform between the experiments.  Such a leakage oracle would let a reduction
-answer a malformed embedded coefficient without pretending that the
-coefficient is a random-oracle image.
-
-\begin{theorem}[Polynomial chosen-input HMLWE is false]
-Suppose every coefficient of an independent $e\sample D_E$ has mean zero and
-lies in $[-B,B]$, the secret coefficients are integral with centered magnitude
-at most $\beta_s$, and $\beta_s+B<q/2$.  For
-\[
- T\geq8B^2\ln(2nd/\epsilon),
- \qquad \ell=nT,
-\]
-there is an $\ell$-query adversary that recovers
-$\mathbf s\in R_q^n$ with probability at least $1-\epsilon$ and then
-distinguishes the hashed oracle with overwhelming advantage.
-\end{theorem}
-
-\begin{proof}
-For each module coordinate $j\in[n]$, query the ring-unit vector
-$\mathbf e_j$ under $T$ fresh labels.  The answers are
-\[
- y_{j,t}=s_j+e_{j,t}.
-\]
-Center the coefficients modulo $q$, average the $T$ answers coefficientwise,
-and round to the nearest integer.  Hoeffding's inequality gives
-\[
- \Pr\!\left[
-   \left|T^{-1}\sum_t e_{j,t}[k]\right|\geq\tfrac12
- \right]
- \leq2e^{-T/(8B^2)}.
-\]
-A union bound over the $nd$ secret coefficients proves recovery with the
-stated probability.  The adversary then makes a fresh hashed query, subtracts
-the now-known inner product, and tests whether the residual is short.  It is
-distributed as $D_E$ in the real experiment and is uniform in the ideal
-experiment.
-\end{proof}
-
-With the illustrative BLNS23 values $B=8$, $n=93$, $d=64$, and
-$\epsilon=2^{-128}$, the conservative Hoeffding bound gives
-$T=47{,}910$ repetitions per module coordinate and about $4.46$ million
-chosen queries in total.  The exact attack is likely cheaper for a concrete
-Gaussian error distribution, but the polynomial upper bound is what matters
-asymptotically.
-
-This theorem does not attack the aggregate protocol: its user receives only
-the sum of all component evaluations, not $\mathcal L_{\mathbf s_i}$ for an
-isolated component.  It instead rules out the most direct black-box repair of
-the ordinary-HMLWE reduction.  A proof of the Fiat--Shamir construction must
-exploit the aggregate masking jointly; granting the simulator separate
-chosen-input leakage under each lane key is both stronger than the protocol
-and asymptotically insecure.
-
-\section{Cut-and-choose analysis}
-
-Call a branch \emph{openable} if its disclosed witness passes every opening
-check.  An accepted transcript has at least one openable branch in every pair.
-Suppose the adversary prepares one openable and one malformed branch in each of
-$k$ attacked lanes.  All malformed branches are selected exactly when the
-challenge opens the openable branch in every attacked lane, hence
-\[
- \Pr[\text{all attacked selections malformed}]=2^{-k}.
-\]
-In particular, removing every honest mask across $\kappa$ lanes has probability
-$2^{-\kappa}$ per attempt, and at most $Q2^{-\kappa}$ over $Q$ attempts by a
-union bound.
-
-For the direct scaled-unit attack, the adversary sets every malformed selected
-commitment to $\alpha\mathbf e_j$.  If all lanes select those branches, then
-\[
- h=\alpha\sum_i s_{i,j}+e,
-\]
-so rounding $h/\alpha$ exposes a coordinate of the summed key.  The event has
-probability $2^{-\kappa}$ per independent classical trial, while generic
-quantum Fiat--Shamir grinding costs about $2^{\kappa/2}$.  If any unopened lane
-is honest, its term remains in
-the aggregate and is intended to computationally mask the malformed terms.
-
-This last sentence is an assumption to be proved, not a consequence of the
-elementary probability calculation.
-
-\subsection{Extraction needed by a transcript-causal game}
-
-The desired statement can be separated into an information-selection claim
-and a lattice-pseudorandomness claim.  Let
-$\mathsf{Valid}(i,b)$ denote the existence of an opening satisfying all lane
-relations.  For a fixed vector of branch commitments, there is at most one
-challenge $\boldsymbol\chi$ for which every opened branch is valid while every
-selected branch is invalid: in every pair it must open the unique valid branch.
-Consequently, a classical adversary making $q_H$ Fiat--Shamir trials reaches
-this all-invalid event with probability at most
-\[
-  q_H 2^{-\kappa},
-\]
-up to collisions and challenge bias.  In the QROM the corresponding generic
-bound has the expected quadratic loss, $O(q_H^2 2^{-\kappa})$.
-
-For one isolated issuance, knowledge of one valid selected witness is enough
-to invoke an HMLWE mask after sampling every other lane key locally.  Across
-adaptive issuances this argument is sound only if the same embedded lane stays
-valid, as proved in Section~\ref{sec:fr-ahmlwe}.  It does not establish the
-rotating-lane case: when the embedded lane is malformed, the simulator is
-asked for an arbitrary inner product under an unknown secret.
-
-The classical extraction step has a direct two-fork argument.  Fix the user's
-state immediately before its Fiat--Shamir query, and obtain two accepting
-transcripts with the same branch commitments but distinct challenges
-$\boldsymbol\chi\neq\boldsymbol\chi'$.  There is an index $j$ such that
-$\chi_j\neq\chi'_j$.  Because the challenges are binary,
-\[
-  \chi'_j=1-\chi_j=b_j^*.
-\]
-The second transcript therefore opens exactly the branch that was selected and
-left unopened in the first transcript.  Verification of that opening yields
-$(m_j^*,\rho_j^*,\mathbf r_j^*,\mathbf e_{2,j}^*)$, the witness required by
-the HMLWE reduction.
-
-\begin{lemma}[Two-fork selected-lane extraction]
-Assuming binding of the global branch commitment, two accepting transcripts with
-identical pair commitments and distinct
-challenge vectors reveal a valid witness for at least one branch selected in
-the first transcript (and symmetrically for one branch selected in the
-second).
-\end{lemma}
-
-The proof is the coordinate argument above and is information theoretic, but
-it extracts only one selected branch.  A prospective transcript-causal proof
-may need witnesses across many selected branches.  Repeating the fork does not
-automatically provide them: accepting
-challenges can differ repeatedly in the same small set of coordinates.  A
-multi-fork extractor must either force sufficiently broad challenge coverage
-or use an independently extractable branch commitment.
-
-If a
-fixed commitment vector admits only one accepting challenge, its Fiat--Shamir
-success probability is $2^{-\kappa}$.  If a classical polynomial-time prover
-succeeds with non-negligible probability, the standard forking strategy---rewind
-at the challenge query and answer it independently---obtains two distinct
-accepting challenges with non-negligible probability, subject to the usual
-forking loss in the number of random-oracle queries.  This supplies the
-single-lane witness used by the fixed-lane HMLWE lemma, but it does not repair
-the false adaptive aggregate game or provide a multi-query reduction.
-
-What remains unresolved is making the extractor online and adaptive for
-polynomially many signing queries and concurrent sessions, and then lifting it
-to the QROM.  Generic Fiat--Shamir proofs of knowledge do not automatically
-provide adaptive multi-theorem extraction, and quantum rewinding cannot simply
-copy the prover state.  A QROM proof would instead need a measure-and-reprogram
-argument and a suitable adaptive special-soundness theorem~\cite{DFM20}.
-
-One clean but expensive proof device is to add an extractable commitment to
-each branch witness, or attach an encryption-to-the-sky of each branch
-witness.  The security reduction then knows the extraction key and can recover
-the selected valid witness, while no such key exists in the real protocol.
-This avoids adaptive rewinding but adds $2\kappa$ large lattice ciphertexts and
-may erase the proposed efficiency advantage.  Finding a lightweight
-extractability mechanism is therefore part of the contribution.
-
-\subsection{Counterexamples to nearby variants}
-
-The analysis already gives concrete counterexamples to several tempting
-simplifications:
-\begin{enumerate}
- \item If individual lane responses are released, attacking one pair succeeds
- with probability $1/2$ and leakage accumulates across sessions.
- \item If all lanes reuse the same secret $\mathbf s$, a malformed lane can be
- correlated with an honest lane so that their coefficients cancel.  Independent
- lane keys are essential.
- \item If the Fiat--Shamir hash omits any branch commitment, public key, lane
- index, or protocol domain, the omitted value can be chosen after the challenge.
- \item If $\kappa=128$ is used against quantum users, the balanced splice has
-only approximately 32 bits of generic quantum work.
- \item If responses or partial sums are emitted before all openings pass, one
- malformed lane again becomes a probability-$1/2$ key-leakage oracle.
-\end{enumerate}
-
-The unrestricted ``one-honest-lane aggregate security'' conjecture is false.
-Section~\ref{sec:rectangle} gives the reusable-input and balanced protocol
-splices.  Section~\ref{sec:fr-ahmlwe} gives a closed-cycle distinguisher against
-the proposed majority-fresh oracle game, even though all marked valid inputs
-are fresh.  Only the all-lanes-valid and fixed-honest-lane restrictions reduce
-to ordinary HMLWE.  Any remaining proof must retain the protocol's
-commit--challenge--open order rather than granting arbitrary final tuples.
-
-\section{Blindness intuition}
-
-The issuer learns only the opened decoy branch in each lane.  The credential
-contains the complementary messages.  At presentation the issuer learns
-$(m_i^*,\rho_i^*)_i$ and can subtract their hashes from the stored unopened
-commitments, but deciding whether
+In the two-message proposal, the issuer sees the opened decoy branches during
+issuance.  The credential contains the other messages.  When the credential
+is presented, the issuer learns $(m_i^*,\rho_i^*)_i$.  It can subtract their
+hashes from a stored issuance request and test whether that request might
+have produced the credential.  This leads to the question of whether
 \[
  \mathbf c_i^*-H_R(m_i^*,\rho_i^*)
    =B_i\mathbf r_i^*+\mathbf e_{2,i}^*
 \]
-for short unknown values should be hidden by the underlying MLWE distribution.
-This suggests issuance--presentation unlinkability when opened and unopened
-messages have indistinguishable distributions.
+holds for some short, unknown blinding vectors.  The intended MLWE argument
+is that recognizing this relation is hard.  If opened and selected messages
+also have indistinguishable distributions, this suggests that the issuer
+cannot tell which issuance produced a presented credential.  A complete
+blindness proof must make that argument precise.
 
-The response proof is necessary against a malicious issuer.  Without it, the
-issuer may use malformed component keys or signer-chosen errors to watermark
-credentials.  The proof must establish key-parameter consistency for every lane
-and at least constrain the aggregate error norm.  Proving deterministic PRF
-generation of the error would add a nonlinear relation and may undermine the
-claimed efficiency; alternatively, one must prove that every permitted bounded
-error is erased by rounding except with negligible probability and cannot be
-used for selective-failure tagging.
+A dishonest issuer may try to mark credentials by using malformed keys or
+specially chosen errors.  The response proof must link every lane key to the
+public parameters and bound the aggregate error.  One option is to prove
+that the error came from the required secret pseudorandom function, but this
+adds a nonlinear computation to the proof.  Another is to show that every
+allowed error disappears under rounding except with negligible probability.
+The analysis must also rule out \emph{selective failure}: causing particular
+requests to fail so that later behavior reveals which credential was issued.
 
-\section{Requirements for a full proof}\label{sec:open}
+For the common-message variant, privacy must still hold after the user
+reveals the selected commitment openings at presentation.  The aggregate
+hardness theorem alone does not show that these openings leave the issuance
+session hidden.
+
+\section{What remains to be proved}\label{sec:open}
 
 \begin{enumerate}
- \item \textbf{Round-optimal transcript-causal pseudorandomness.} Prove
-response-only tc-AHMLWE and its equality-verification one-more companion for
-the Fiat--Shamir protocol.  Section~\ref{sec:unpredictable-repair} proves the
-corresponding aggregate reduction only with an unpredictable signer challenge;
-Fiat--Shamir grinding invalidates its untouched-component lemma, and
-polynomial chosen-input leakage under the embedded key is not a sound
-replacement.  A joint concatenated-secret proof must additionally simulate
-adaptive malformed branch tables around its challenge rows; direct
-non-uniform-LWE arguments are vacuous after conditioning on those tables.
- \item \textbf{Global lane freshness.} Enforce non-repeating session
-identifiers across concurrency, crashes, rollback, and distributed signer
-replicas, and bind $\rho$ to that identifier as in the construction above.
- \item \textbf{Related inputs across sessions.} Prove security for fresh but
-algebraically related message vectors; coordinate freshness blocks the fully
-honest rectangle but not the balanced malformed-copy splice, and does not by
-itself establish pseudorandomness.
- \item \textbf{Selective failure.} Show that malicious challenges, aborts,
- malformed response proofs, and rounding failures do not identify the hidden
- branch vector at later presentation.
- \item \textbf{Concurrency and reset security.} Bind every message to a unique
- session and analyze interleaved, replayed, reset, and rolled-back sessions.
- \item \textbf{One-more unforgeability.} Define the repaired message space and
- rule out linear combinations or splicing of issued credentials.
- \item \textbf{Malicious-key security.} Prove that the batched response NIZK
- gives key-parameter consistency and prevents subliminal tagging.
- \item \textbf{Noise growth.} Instantiate parameters for the aggregate error
- and bound the rounding-failure probability at the target security level.
- \item \textbf{Fiat--Shamir and challenge entropy.} Give ROM and QROM analyses
- accounting for adaptive transcript grinding, multi-target attacks, malicious
- abort-and-restart strategies, and concurrency.  Determine whether
- $\kappa=512$ tightly achieves 128-bit post-quantum soundness after accounting
-for the balanced splicing attack.
- \item \textbf{Side channels and atomicity.} Ensure that no individual lane
- response, partial sum, failing index, or timing signal is released.
+ \item \textbf{Security of the two-message proposal.} Prove both goals from
+Section~\ref{sec:security-targets}: responses should look random, and a user
+should not obtain extra credentials.  Account for adaptive requests,
+classical and quantum hash queries, grinding, multiple targets, and splicing.
+ \item \textbf{Connecting the interactive game to the full protocol.}
+Complete the simulations of public keys, blinding terms, response proofs,
+and verification answers.  Choose a commitment scheme with the hiding,
+binding, and rerandomization properties used in the one-more argument,
+including suitable bounds on its randomness and openings.
+ \item \textbf{Sessions and counters.} Keep session identifiers unique.
+For the interactive variant, enforce the attempt counter and branch-count
+schedule even under simultaneous requests, deliberate aborts, crashes,
+rollback, and multiple signer replicas.
+ \item \textbf{Privacy against a dishonest issuer.} Rule out linking through
+keys, errors, failed requests, or later presentation.  Supply a sound
+zero-knowledge response proof, and justify how public matrices are generated
+and keys are checked.
+ \item \textbf{Choosing secure parameters.} Analyze lattice hardness, the
+sum of lane errors, and rounding failures together.  The starting value
+$\kappa=512$ only addresses the generic balanced quantum splice.  A full
+128-bit bound and realistic efficiency estimates are still needed for each
+variant and branch count.
+ \item \textbf{Returning only the intended output.} Check all openings before
+returning any secret-dependent value.  Ensure that partial sums, individual
+lane responses, failure details, and timing reveal no extra information.
 \end{enumerate}
 
-\section{Preliminary efficiency discussion}
+\section{Estimated communication and computation costs}\label{sec:efficiency}
 
-The candidate removes the hash-heavy user NIZK, replacing it with
-$2\kappa$ hash commitments and $\kappa$ seeded openings.  For a
-classical target with $\kappa=256$, issuance prepares 512 lattice commitments
-and opens 256 witnesses; the post-quantum starting point $\kappa=512$ doubles
-those figures.  Fiat--Shamir preserves two-message issuance despite this
-bandwidth.  The signer performs $\kappa$ hash-and-relation checks and one
-aggregate evaluation.
-The response NIZK is larger than the single-lane BLNS23 $\pi_2$, but is
-batchable and purely lattice algebraic.
+These estimates cover the two-message proposal, including an optional version
+with more branches per lane.  They do not include the four-message variant's
+seed tags, common-message commitments, or changing branch counts.
 
-\subsection{Concrete communication estimate}
+The user prepares $2\kappa$ lattice branches, commits to them with one
+digest, and opens $\kappa$ by sending their seeds.  With $\kappa=256$, this
+means 512 branches and 256 openings.  The quantum starting point
+$\kappa=512$ doubles both counts.  The signer checks the opened branches and
+computes one aggregate response.  Its proof covers more relations than the
+single-lane BLNS23 response proof, but those relations can be handled together
+and contain only lattice arithmetic and size bounds.
 
-We instantiate the wire calculation with the BLNS23 keyed-verification values
+\subsection{Bytes sent and stored}
+
+For this size calculation, use the BLNS23 keyed-verification values
 $d=64$, $n=93$, $\lceil\log_2q\rceil=152$, $p=4$, and 32-byte messages and
 tags.  We take $\kappa=512$ as the minimum starting point for 128-bit
 post-quantum resistance to the balanced Fiat--Shamir splice.  Ring elements are packed at
@@ -1328,11 +1073,12 @@ The aggregate response $h\in R_q$ occupies
  |h|=d\lceil\log_2q\rceil=64\cdot152=9{,}728\text{ bits}
  =1{,}216\text{ bytes}.
 \]
-The second message has length $1{,}216+|\pi_{\mathrm{resp}}|$ bytes.  An exact
-total for that message requires an instantiated batched LaBRADOR relation and
-cannot be inferred from the asymptotic construction.
+The second message has length $1{,}216+|\pi_{\mathrm{resp}}|$ bytes.  To give an exact
+total, we need an actual zero-knowledge proof for all the response relations.
+A suitable construction could use LaBRADOR~\cite{BS22}, but the equations
+alone do not determine the proof size.
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \begin{tabular}{lr}
 \toprule
@@ -1363,18 +1109,18 @@ $d\log_2p=128$ bits for $v$:
 If the messages are considered part of the stored credential rather than
 external signed data, 16,384 additional bytes give a 32,784-byte credential.
 
-\subsection{Optional optimization: higher-arity cut-and-choose}
+\subsection{Optional tradeoff: more branches per lane}
 
-The binary construction above is the base scheme: it gives the simplest
-protocol description, two-fork extractor, and security game.  Higher arity is
-an optional optimization and should be analyzed only after the binary scheme
-is proved secure.
+Two branches per lane give the simplest protocol and security game.  Using
+more branches is an optional way to reduce bandwidth, at the cost of more
+computation.  Its security analysis should follow a proof of the binary
+proposal.
 
-The dominant term can be reduced by replacing binary pairs with groups of
-$A=2^a$ branches.  Fiat--Shamir selects one branch per group to remain
-unopened; the other $A-1$ branches are disclosed as 32-byte seeds.  If there
-are $g$ independent groups, making every selected branch malformed succeeds
-with probability
+Most of the first message consists of full lattice vectors.  We can send
+fewer of these by using groups of $A=2^a$ branches.  Fiat--Shamir selects one
+branch per group to stay hidden; the other $A-1$ are opened with 32-byte
+seeds.  With $g$ independently keyed groups, hiding one malformed branch in
+every group succeeds with probability
 \[
  A^{-g}=2^{-ag}.
 \]
@@ -1388,7 +1134,7 @@ the response proof, the fixed first-message size is
  \qquad g=\left\lceil\frac{512}{\log_2 A}\right\rceil.
 \]
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \begin{tabular}{rrrrr}
 \toprule
@@ -1424,13 +1170,13 @@ while increasing branch computation by only two to three times.  A benchmark
 must include deterministic expansion, hash-to-ring, matrix--vector products,
 and response-proof scaling before selecting $A$.
 
-The two-fork extraction argument generalizes: two accepting transcripts whose
-selected indices differ in some group cause the second transcript to open the
-branch selected in the first.  The proof must use an $A$-ary challenge and bind
-all branches in the global commitment.
+The earlier two-transcript argument still works.  If two accepted openings
+of the same table select different indices in a group, the second reveals
+the branch hidden in the first.  The challenge now has $A$ choices per group,
+and the digest must still bind every branch.
 
-This optimization changes the key shape and is not merely a wire encoding.
-In the binary base scheme there are $\kappa=512$ independent component secrets
+Changing the branch count also changes the keys and the equations.  The
+binary proposal has $\kappa=512$ independent lane secrets:
 \[
  (\mathbf s_0,\ldots,\mathbf s_{511})
      \in (R_q^n)^{512}.
@@ -1443,51 +1189,39 @@ secrets,
  \qquad
  h=\sum_{i=0}^{g-1}\mathbf s_i^T\mathbf c_i^*+e.
 \]
-Thus arity changes the public and secret key sizes, the number of terms and
-noise contributions in the aggregate, the batched response-proof statement,
-and the number of $(m_i,\rho_i)$ pairs in the MAC.  Each component key retains
-the full BLNS23 module dimension; only the number of independently keyed
-groups changes.  A concrete $A$ must therefore receive its own correctness,
-hardness, and parameter analysis rather than inheriting the binary parameters
-automatically.
+Fewer lane keys mean smaller keys, fewer terms and errors in the aggregate,
+fewer response-proof relations, and fewer message/tag pairs in the MAC.
+Each lane key still uses the full BLNS23 module dimension.  Only the number
+of separately keyed groups changes.  We must therefore check correctness,
+lattice hardness, and parameters again for each choice of $A$.
 
-The credential contains $\kappa$ message/tag pairs unless they admit a safe
-compression mechanism.  This is a major cost and must be included in any
-comparison.  A credible evaluation should report total issuance bytes, prover
-and verifier time, credential bytes, presentation time, public-key size, secret
-key size, and rounding-failure probability.
+The credential still stores $\kappa$ message/tag pairs in the binary version,
+or $g$ in the higher-arity version, unless a safe compression method is found.
+Any comparison should include those bytes as well as the issuance traffic,
+proof-generation and checking times, presentation time, key sizes, and
+rounding-failure probability.
 
 \section{Conclusion}
 
-The cut-and-choose mechanism detects malformed selections, but analyzing only
-the all-malformed event is insufficient.  Reusable valid inputs give a free
-four-corner forgery, while session freshness still permits a balanced
-malformed-copy splice costing about $2^{\kappa/2}$ classically or
-$2^{\kappa/4}$ under generic quantum search.  The formal half-copy theorem
-shows this cost is optimal for copy-and-combine linear splicing, but it does not
-exclude lattice-specific relations.  Ordinary HMLWE proves aggregate masking
-when all lanes are valid or one fixed lane remains valid throughout.  The
-natural majority-fresh extension is not merely unproved: a three-query closed
-cycle cancels every keyed term and distinguishes it from random.  That oracle
-attack over-approximates the actual protocol because it omits
-commit-before-challenge causality, so it is not by itself an additional
-protocol forgery.  A transcript-causal game and reduction, multi-branch
-extraction, QROM soundness, malicious-key security, and concrete aggregate-noise
-parameters therefore remain necessary before the proposal can support a
-security claim.  The transcript-causal candidate blocks that particular cycle
-only by forcing a full $\kappa$-bit challenge; it remains unproved, and
-response pseudorandomness alone does not imply one-more security for the
-separable verifier.  A positive standard-HMLWE theorem is available after
-adding extractable seed tags, a common hidden-message commitment, scheduled
-growing arity, and an unpredictable signer challenge.  Its untouched-component
-proof fails for Fiat--Shamir because polynomially many discarded digests can
-target every component.  A lane-by-lane reduction cannot simply request the
-missing malformed evaluations: polynomial chosen-input HMLWE permits
-basis-query averaging and secret recovery.  Thus the present evidence
-identifies a sharp
-tradeoff: the aggregate construction can be proved from ordinary HMLWE in the
-more interactive variant, while the two-message version still needs the new
-tc-OMHLF assumption or a different hidden-selection mechanism.
+Cut-and-choose offers a way to avoid proving hash computations inside the
+user's first message.  The user opens some branches for checking, and the
+signer returns one sum under independent lane keys.  But summing separate
+lane contributions also enables splicing attacks.  Unique sessions block
+the fully honest rectangle attack; balanced splicing still costs about
+$2^{\kappa/2}$ classically or $2^{\kappa/4}$ with generic quantum search.
+These attacks set a minimum lane count for resisting them.  Security of the
+two-message proposal remains open.
+
+The four-message variant has a more direct proof route.  The signer chooses
+what to check after commitment, and a counted schedule limits the total
+chance of cheating in each lane.  Seed tags let the classical reduction
+recover the selected witnesses.  With high probability, one fixed lane
+remains valid throughout, allowing the simplified response game to reduce to
+ordinary HMLWE.  Binding every lane to the same hidden message then makes an
+extra distinct-message credential require a new evaluation in that lane.
+The remaining work is to connect this game to the full protocol, prove
+privacy, and choose concrete secure parameters.  The two-message proposal
+needs its own reduction that handles the user's ability to grind challenges.
 
 \begin{thebibliography}{9}
 \bibitem{BLNS23}
@@ -1503,42 +1237,12 @@ Instance Cut-and-Choose and More.
 \newblock IACR Cryptology ePrint Archive, Report 2022/007, 2022.
 \newblock \url{https://eprint.iacr.org/2022/007}.
 
-\bibitem{Pietrzak12}
-K.~Pietrzak.
-\newblock Subspace LWE.
-\newblock In \emph{TCC 2012}, LNCS 7194, pp.~548--563, 2012.
-\newblock \url{https://www.iacr.org/archive/tcc2012/71940166/71940166.pdf}.
-
-\bibitem{BLLSS15}
-S.~Bai, A.~Langlois, T.~Lepoint, D.~Stehl\'e, and R.~Steinfeld.
-\newblock Improved Security Proofs in Lattice-Based Cryptography: Using the
-R\'enyi Divergence Rather Than the Statistical Distance.
-\newblock In \emph{ASIACRYPT 2015}, LNCS 9452, pp.~3--24, 2015.
-\newblock \url{https://www.iacr.org/archive/asiacrypt2015/94520196/94520196.pdf}.
-
-\bibitem{Boudgoust22}
-K.~Boudgoust, C.~Jeudy, A.~Roux-Langlois, and W.~Stehl\'e.
-\newblock Entropic Hardness of Module-LWE from Module-NTRU.
-\newblock IACR Cryptology ePrint Archive, Report 2022/245, 2022.
-\newblock \url{https://eprint.iacr.org/2022/245}.
-
-\bibitem{BPR12}
-A.~Banerjee, C.~Peikert, and A.~Rosen.
-\newblock Pseudorandom Functions and Lattices.
-\newblock In \emph{EUROCRYPT 2012}, LNCS 7237, pp.~719--737, 2012.
-\newblock \url{https://www.iacr.org/archive/eurocrypt2012/72370713/72370713.pdf}.
-
 \bibitem{BS22}
 W.~Beullens and G.~Seiler.
 \newblock LaBRADOR: Compact Proofs for R1CS from Module-SIS.
-\newblock IACR Cryptology ePrint Archive, 2022.
+\newblock IACR Cryptology ePrint Archive, Report 2022/1341, 2022.
+\newblock \url{https://eprint.iacr.org/2022/1341}.
 
-\bibitem{DFM20}
-J.~Don, S.~Fehr, and C.~Majenz.
-\newblock The Measure-and-Reprogram Technique 2.0: Multi-Round
-Fiat--Shamir and More.
-\newblock IACR Cryptology ePrint Archive, Report 2020/282, 2020.
-\newblock \url{https://eprint.iacr.org/2020/282}.
 \end{thebibliography}
 
 \end{document}
