@@ -47,10 +47,16 @@ a committed relation $T_{\mathrm{rel}}$, only with probability
 $O\bigl(Q_h\,(|T|+Q\,|T_{\mathrm{rel}}|)\,2^{-\kappa}\bigr)$, and every
 accepted session retains more than $\kappa/2$ honestly formed,
 challenge-selected branch vectors except with probability
-$Q_h\,2^{-\kappa/2}$.  What remains heuristic is the step from uncontrolled
-responses to lattice hardness, the one-more accounting, and the quantum
-random-oracle extension (Section~\ref{sec:proofneeds}).  Under that remaining
-intuition the best attacks we know are the copying-and-combining attacks of
+$Q_h\,2^{-\kappa/2}$.  The remaining lattice step is isolated as a single
+decisional assumption, \emph{structured-sum HMLWE}
+(Section~\ref{sec:latticestep}): key recovery reduces to it, linear
+distinguishing strategies reduce to module-SIS or to the proven bounds,
+residual control over the samples is priced by density, one-more
+unforgeability follows from it together with the common-message binding, and
+we explain why no reduction to plain MLWE can reach it.  The assumption
+itself, its quantum analogue, and the simulation details of the one-more
+hybrids remain open (Section~\ref{sec:proofneeds}).  Under that assumption
+the best attacks we know are the copying-and-combining attacks of
 Section~\ref{sec:splicing}, costing about $2^{\kappa/2}$ classical or
 $2^{\kappa/4}$ quantum work, so $\kappa=512$ is the starting point.
 \end{abstract}
@@ -59,10 +65,13 @@ $2^{\kappa/4}$ quantum work, so $\kappa=512$ is the starting point.
 \fbox{\parbox{0.92\linewidth}{\textbf{Security status.}
 The challenge-game core of the construction is proven in the classical
 random-oracle model (Section~\ref{sec:romproof},
-Theorem~\ref{thm:fixpoint}).  The proof does not extend to quantum query
-access, the reduction from uncontrolled responses to a standard lattice
-assumption remains heuristic, and one-more unforgeability is unaccounted
-for (Section~\ref{sec:proofneeds}).
+Theorem~\ref{thm:fixpoint}).  The remaining lattice step is isolated as one
+decisional assumption, structured-sum HMLWE, with the surrounding links
+proven: key recovery and one-more unforgeability reduce to it, and no
+reduction from a standard assumption is available along known lines
+(Section~\ref{sec:latticestep}).  The proof does not extend to quantum query
+access, the isolated assumption is unproven, and the one-more simulation
+details are uninstantiated (Section~\ref{sec:proofneeds}).
 The scheme must not be deployed as a secure credential system.}}
 \end{center}
 
@@ -107,12 +116,14 @@ The cost is equally concrete, and we state it up front: the BLNS23 proof
 route --- extraction from the user's well-formedness proof --- no longer
 exists, because cut-and-choose removed that proof, and the selected branches
 are never revealed in any extractable form: their leaf hashes commit without
-opening.  No replacement reduction is known.  Security here rests on the
-interaction of the challenge hash with the aggregate, which we call
-\emph{structured-sum fixpoint hardness}; we prove its challenge-game content
-in the classical random-oracle model
-(Section~\ref{sec:romproof}), while the step from its conclusion to standard
-lattice hardness remains unstudied.
+opening.  No replacement reduction is known, and
+Section~\ref{sec:latticestep} explains why none can exist along known lines.
+Security here rests on the interaction of the challenge hash with the
+aggregate, which we call \emph{structured-sum fixpoint hardness}; we prove
+its challenge-game content in the classical random-oracle model
+(Section~\ref{sec:romproof}), and we isolate the step from its conclusion to
+lattice hardness as a single decisional assumption, proving the links around
+it (Section~\ref{sec:latticestep}).
 
 \paragraph{Roadmap.}
 Section~\ref{sec:notation} fixes notation.  Section~\ref{sec:construction}
@@ -120,9 +131,9 @@ gives the construction with drawings.  Section~\ref{sec:correctness} shows why
 honest credentials verify.  Section~\ref{sec:intuition} gives the security
 intuition and analysis: the commit-before-challenge order, the fixpoint wall,
 the sum-to-target (Wagner) analysis, a random-oracle proof of the fixpoint
-game, the splicing attacks and their costs, the
-common-message strengthening that demotes splicing to duplication, and
-blindness.  Section~\ref{sec:efficiency} estimates sizes.
+game, the isolation of the remaining lattice step, the splicing attacks and
+their costs, the common-message strengthening that demotes splicing to
+duplication, and blindness.  Section~\ref{sec:efficiency} estimates sizes.
 Section~\ref{sec:proofneeds} lists what remains unproven.
 
 \section{Notation and basic tools}
@@ -437,7 +448,8 @@ share one secret $\mathbf s$ and one public-key error $\mathbf e_1$.
 
 We state the attacks we know, the design rules they force, the part of the
 security claim that can be proven in the random-oracle model
-(Section~\ref{sec:romproof}), and the parts that remain heuristic.
+(Section~\ref{sec:romproof}), and the isolation of the part that cannot
+(Section~\ref{sec:latticestep}).
 
 \subsection{The load-bearing order: commit before challenge}
 \label{sec:order}
@@ -598,13 +610,10 @@ relation committed before the later session's challenge query.}}
 
 Given this property, the responses $h=\mathbf s^{T}\mathbf
 C_{\mathrm{sel}}+e$ are learning-with-errors samples whose public vectors the
-attacker can influence but not aim, and standard intuition applies: key
-recovery from uncontrolled samples is the MLWE problem, and the value
-$\mathbf s^{T}H_R(\cdot)$ at a fresh, session-bound input behaves like a
-pseudorandom function (this is the HMLWE heuristic of BLNS23, modeled on its
-Lemma~4.3).  That second step --- from uncontrolled samples to lattice
-hardness --- is \emph{not} covered by the random-oracle analysis and remains
-heuristic.
+attacker can influence but not aim.  Whether such samples are safe --- and
+what exactly must be assumed to conclude that they are --- is the subject of
+Section~\ref{sec:latticestep}, which isolates the step as one decisional
+assumption (structured-sum HMLWE) and proves the links around it.
 
 \subsection{Why not a sum-to-target attack?}
 \label{sec:wagner}
@@ -660,10 +669,9 @@ Two qualifications keep this honest.  First, relaxations: if a \emph{set} $T$
 of dangerous peeled sums is exploitable --- say, all sufficiently sparse
 differences rather than only unit vectors --- the effective attack cost
 divides by $|T|$, and list-merging is exactly how an attacker would harvest
-relaxed targets.  Bounding $|T|$ rigorously is part of what a proof of
-key-recovery resistance must do (Section~\ref{sec:proofneeds}); the
-target-avoidance lemma below (Lemma~\ref{lem:target}) makes the dependence
-explicit.  Second, the argument is parametric: it rests on
+relaxed targets.  Bounding $|T|$ rigorously is priced by
+Lemma~\ref{lem:grind}: every bit of $\log_2|T|$ comes directly off the
+margin.  Second, the argument is parametric: it rests on
 $N\gg\kappa\,(1+\log_2\kappa)$.  Shrinking the ring, the vector length, or
 the challenge length to save bandwidth moves the construction toward the
 regime where $2^{N/(1+\log_2\kappa)}$ crosses below $2^{\kappa/2}$ and
@@ -793,8 +801,8 @@ For key recovery, $T$ is the set of peeled sums from which key material is
 extractable --- unit vectors, and whatever sparse or structured vectors
 suffice --- and the lemma prices the attack at
 $Q_h\,|T|\,2^{-\kappa}$.  Every bit of $\log_2|T|$ comes directly off the
-margin, which is why bounding the dangerous target set is listed as proof
-work in Section~\ref{sec:proofneeds}.
+margin; Lemma~\ref{lem:grind} below extends the same pricing to target sets
+the attacker does not commit but selects by rejection.
 
 \begin{lemma}[committed-relation resistance]
 \label{lem:relation}
@@ -861,15 +869,277 @@ classical query transcripts; a quantum attacker queries in superposition, and
 the analysis needs compressed-oracle or equivalent techniques.  The
 $2^{\kappa/4}$ quantum floor of Section~\ref{sec:splicing} is only a
 generic-search estimate.  Second, the step from uncontrolled peeled sums to
-key-recovery resistance: Theorem~\ref{thm:fixpoint} says the attacker cannot
-aim $\mathbf C_{\mathrm{sel}}$, not that
+lattice hardness: Theorem~\ref{thm:fixpoint} says the attacker cannot aim
+$\mathbf C_{\mathrm{sel}}$, not that
 $h=\mathbf s^{T}\mathbf C_{\mathrm{sel}}+e$ with uncontrolled
-$\mathbf C_{\mathrm{sel}}$ is safe; that step is the MLWE/HMLWE heuristic
-discussed above, and it is where the sizes of $T$ and $T_{\mathrm{rel}}$ must
-be justified.  Third, one-more unforgeability: the rectangle relation
-combines responses across sessions regardless of how uncontrolled each
-session is individually, and the accounting of
-Section~\ref{sec:commonmessage} is outside the challenge game entirely.
+$\mathbf C_{\mathrm{sel}}$ is safe.  That step is taken up in
+Section~\ref{sec:latticestep}, which isolates it as a single decisional
+assumption (structured-sum HMLWE), proves the links from it to key recovery
+and one-more unforgeability, and shows why no reduction to plain MLWE
+applies; the assumption itself remains open.  Third, the simulation details
+of the one-more accounting: the counting argument is
+Theorem~\ref{thm:onemore}, but its hybrid steps --- response-proof
+simulation, key validation, correctness --- remain uninstantiated.
+
+\subsection{The lattice step: isolating the remaining assumption}
+\label{sec:latticestep}
+
+Theorem~\ref{thm:fixpoint} leaves a precise gap, and this subsection
+determines exactly what fills it.  Condition on its good event.  Every
+accepted session hands the attacker a sample
+\[
+ \bigl(\mathbf C_{\mathrm{sel}},\;h=\mathbf s^{T}\mathbf
+ C_{\mathrm{sel}}+e\bigr),
+ \qquad
+ \mathbf C_{\mathrm{sel}}
+ =\mathbf C_0(X)+\sum_{i\in F}\chi_i\,\boldsymbol\Delta_i,
+ \qquad |F|>\kappa/2,
+\]
+in which \emph{every} vector on the right-hand side is known to the
+attacker: it built the branch table, junk included.  The only quantity fixed
+after commitment is the challenge, uniform over at least $|F|$ effective
+bits of selection.  Issuance is therefore an oracle for
+learning-with-errors samples whose matrices the attacker knows completely
+and influences in exactly two ways: it chooses the table, and it chooses
+which challenge queries to carry to completion.  The \emph{lattice step} is
+the claim that such samples neither reveal $\mathbf s$ nor can be produced
+without it.  We isolate that claim as one decisional assumption, prove the
+links from it to key-recovery resistance and one-more unforgeability, price
+the residual control the attacker retains over the matrices, and explain why
+no reduction to a standard assumption is available along known lines.
+
+\paragraph{Why no standard reduction applies.}
+A reduction must answer issuance queries without knowing $\mathbf s$.  Both
+classical routes die on the construction's two defining features.  First,
+the single key: with independent lane keys, the reduction embeds its
+challenge in one lane's key and computes the other lanes' contributions
+locally, absorbing arbitrary content there; here every term of $\mathbf
+C_{\mathrm{sel}}$ lives under the unknown $\mathbf s$, and no known-key lane
+exists to absorb anything.  Second, the peeled sum is not a hash image: an
+HMLWE-style oracle (as in BLNS23's Lemma~4.3) evaluates $\mathbf s$ only at
+fresh outputs of $H_R$, but $\mathbf C_{\mathrm{sel}}$ contains committed
+junk $\mathbf w$ that never passed through $H_R$.  Extraction is not the
+obstacle --- the reduction can recover $\mathbf w$ from the attacker's
+$H_{\mathrm{leaf}}$ query history --- but no oracle will supply $\mathbf
+s^{T}\mathbf w$.  Knowing the key forfeits the embedded challenge; not
+knowing it forfeits the junk term.  Repairing either route means arranging
+for every term of the peeled sum to be a certified hash image, that is,
+proving well-formedness of the unopened branches --- the very proof
+cut-and-choose exists to eliminate.  The remaining assumption must therefore
+be made explicit.
+
+\begin{center}
+\fbox{\parbox{0.92\linewidth}{\textbf{Structured-sum HMLWE (ssHMLWE).}
+In the model of Section~\ref{sec:romproof}, an attacker plays the issuance
+game of Section~\ref{sec:construction} against a challenger holding the
+signer key, with session-identifier uniqueness enforced.  In the \emph{real}
+game, each accepted session is answered by
+$h=\mathbf s^{T}\mathbf C_{\mathrm{sel}}+e$; in the \emph{ideal} game, each
+accepted session is answered by an independent uniform $h\sample\R$.
+The assumption: every classical attacker making polynomially many queries
+distinguishes the two games with advantage negligible beyond the error terms
+of Theorem~\ref{thm:fixpoint}.}}
+\end{center}
+
+Three remarks delimit the assumption.  First, it is purely decisional: it
+asserts pseudorandomness of the response stream and says nothing about
+forgery by itself.  Second, the error terms are load-bearing, and they are
+exactly the right ones: grinding two sessions to \emph{equal} peeled sums
+would distinguish the games (then $h_1-h_2=e_1-e_2$ is small), and
+Lemma~\ref{lem:target} with $|T|=1$ prices that at $2^{-\kappa}$ per query
+pair; the known attacks at the $2^{\kappa/2}$ frontier are forgeries and
+meet-in-the-middle searches, not distinguishers.  No attack on ssHMLWE
+itself is known at any budget.  Third, the assumption is falsifiable in a
+precise sense made explicit after Lemma~\ref{lem:grind} below.
+
+\paragraph{Key recovery reduces to the assumption.}
+The first link needs no lattice machinery at all, because a candidate key
+can be checked against the attacker's own transcript.
+
+\begin{theorem}[keys are self-verifying]
+\label{thm:selfverify}
+Let $\mathcal A$ be an attacker in the real issuance game that outputs the
+signer key with probability $\delta$.  Then there is an ssHMLWE distinguisher
+with advantage at least
+\[
+ \delta-\Bigl(\frac{2\beta_e+1}{q}\Bigr)^{d},
+\]
+where $\beta_e$ is the response-error bound of Section~\ref{sec:peeling}.
+\end{theorem}
+
+\begin{proof}
+The distinguisher relays $\mathcal A$'s issuance sessions to its own
+challenger and reads every $\mathbf C_{\mathrm{sel}}$ off the transcript.
+When $\mathcal A$ outputs a candidate $\hat{\mathbf s}$, the distinguisher
+guesses ``real'' if and only if
+$\|h_j-\hat{\mathbf s}^{T}\mathbf C_{\mathrm{sel},j}\|_\infty\leq\beta_e$
+for the first accepted session $j$.  In the real game a correct key passes
+with probability one, since
+$h_j-\mathbf s^{T}\mathbf C_{\mathrm{sel},j}=e_j$ and
+$\|e_j\|\leq\beta_e$ is enforced by the response proof.  In the ideal game
+$h_j$ is uniform in $\R$ and independent of $\hat{\mathbf s}$, so each of
+its $d$ coefficients falls in the required window with probability
+$(2\beta_e+1)/q$.  The bound follows; at the parameters of
+Section~\ref{sec:efficiency} the subtracted term is below $2^{-128}$.
+(If $\mathcal A$ outputs an \emph{alternative} key consistent with the
+public key, the difference $\mathbf s-\hat{\mathbf s}$ is a short kernel
+element of $B$, and passing the check on every session additionally requires
+$(\mathbf s-\hat{\mathbf s})^{T}\mathbf C_{\mathrm{sel},j}$ to be small on
+the attacker's own samples --- itself an ssHMLWE-type event.)
+\end{proof}
+
+The content of Theorem~\ref{thm:selfverify} is that key recovery is
+\emph{not} the hard direction: any key extractor is a distinguisher, with
+no search-to-decision lemma and no loss.  All remaining content of the
+lattice step lives in the other direction --- producing or predicting
+responses --- and in distinguishing strategies that do not recover the key.
+The next two lemmas constrain the second class.
+
+\begin{lemma}[closed cycles cost a search or a SIS solution]
+\label{lem:lintest}
+Consider a distinguisher that computes, from its final view, short
+coefficients $(\alpha_1,\ldots,\alpha_Q)\in\R^{Q}$, not all zero, and
+accepts when $\sum_j\alpha_j h_j$ is small.  In the ideal game this sum is
+uniform, so distinguishing requires the real-game sum to be small with
+noticeable probability.  Writing
+$\mathbf v=\sum_j\alpha_j\mathbf C_{\mathrm{sel},j}$, exactly one of the
+following holds:
+\begin{itemize}
+ \item[(i)] $\mathbf v\neq0$.  The test then compares
+$\mathbf s^{T}\mathbf v+\sum_j\alpha_je_j$ against uniform for a known
+$\mathbf v$: a decisional keyed-evaluation guess whose hardness is the
+ssHMLWE assumption itself, not an attack on it.
+ \item[(ii)] $\mathbf v=0$, and the relation was fixed before the last
+involved challenge query.  Then the success probability is at most
+$Q_h\,Q\,|T_{\mathrm{rel}}|\,2^{-\kappa}$ by Lemma~\ref{lem:relation}, with
+$|T_{\mathrm{rel}}|$ counting the relations the attacker committed to.
+ \item[(iii)] $\mathbf v=0$, and the relation was found only after all
+involved challenges were sampled.  Then the attacker has produced a short
+kernel vector of the collected matrix
+$A=[\mathbf C_{\mathrm{sel},1}\,|\,\cdots\,|\,\mathbf C_{\mathrm{sel},Q}]$:
+a module-SIS solution on samples it could not aim.
+\end{itemize}
+\end{lemma}
+
+\begin{proof}[Proof sketch]
+The trichotomy is exhaustive by the definition of $\mathbf v$ and by whether
+the coefficients were determined before or after the last involved challenge
+query.  Case (i) restates the test.  Case (ii) is Lemma~\ref{lem:relation}
+applied to the last involved session, conditioned on all earlier ones.
+Case (iii) names the residual computation: given the full matrix $A$, find
+short $\boldsymbol\alpha\neq0$ with $A\boldsymbol\alpha=0$.
+\end{proof}
+
+The point of Lemma~\ref{lem:lintest} is that the natural linear
+distinguisher --- cancel the keyed terms exactly and test the residual
+noise --- has no free instance here.  Engineering the cancellation into the
+samples is a committed relation and pays the proven frontier; discovering it
+afterwards is generic module-SIS.  What remains is the attacker's one real
+degree of freedom: choosing which samples to keep.
+
+\begin{lemma}[residual control is priced by density]
+\label{lem:grind}
+Condition on the good events of Theorem~\ref{thm:fixpoint}.  Suppose the
+attacker keeps a session only when its peeled sum lands in a set $T$ chosen
+from its view --- possibly after the challenge query, as rejection sampling.
+Then the expected number of challenge queries per kept session is at least
+$2^{\kappa}/|T|$.
+\end{lemma}
+
+\begin{proof}
+Fix the committed input $X$.  Under distinctness, the reachable set
+$R_X=\{\mathbf C_{\mathrm{sel}}(X,\boldsymbol\chi)\}$ over acceptable
+$\boldsymbol\chi$ has size $2^{|F|}$, and $\boldsymbol\chi$ is uniform over
+$\{0,1\}^{\kappa}$, so one query lands in $T$ with probability
+$|T\cap R_X|\,2^{-\kappa}\leq |T|\,2^{-\kappa}$.  Discarding misses changes
+nothing per query, and each kept session therefore costs at least
+$2^{\kappa}/|T|$ queries in expectation.
+\end{proof}
+
+Lemma~\ref{lem:grind} prices every attempt to \emph{condition} the collected
+matrices, and the prices land on both sides of the design floor in an
+instructive way.  Aiming at unit vectors ($|T|\approx2^{13}$ at the
+parameters of Section~\ref{sec:efficiency}) costs about $2^{\kappa-13}$
+queries per sample: the key-recovery route of Section~\ref{sec:order} stays
+far above the $2^{\kappa/2}$ floor.  Pinning one prescribed coefficient of
+$\mathbf C_{\mathrm{sel}}$ to a chosen value costs $q\approx2^{152}$ queries
+per sample --- below the floor at $\kappa=512$, and useless on its own:
+shrinking the module-LWE dimension from $nd=5{,}952$ to $k'$ requires
+pinning $5{,}952-k'$ coordinates in \emph{every} collected sample, at cost
+$Q\cdot 2^{152\,(5952-k')}$.  Between ``one coordinate at $2^{152}$,
+useless'' and ``thousands of coordinates, astronomically beyond the floor,''
+no graduated attack is known.  Conditioning two sessions into a short
+difference --- the raw material of a closed cycle --- is priced separately by
+Lemma~\ref{lem:relation} at $|T_{\mathrm{rel}}|\,2^{-\kappa}$ per pair of
+queries.
+
+\paragraph{What would break the assumption.}
+Lemmas~\ref{lem:lintest} and~\ref{lem:grind} locate the residual content of
+ssHMLWE precisely.  The assumption fails exactly if there is an efficiently
+checkable property of the peeled sum that simultaneously (a) makes the
+resulting samples easy --- key-extractable or linearly testable --- and
+(b) is dense enough to afford at the attacker's budget, or is reachable by
+solving module-SIS on the collected matrix.  No such property is known, and
+the two naive families above are priced at or above the $2^{\kappa/2}$ floor
+(with the single, useless exception noted).  This is the sense in which the
+assumption is falsifiable: exhibit a checkable, dense, key-extractable
+property of the peeled sum.
+
+\paragraph{One-more unforgeability from the same assumption.}
+With the common-message binding of Section~\ref{sec:commonmessage}, the
+one-more accounting also reduces to ssHMLWE, up to simulation details that
+remain uninstantiated.
+
+\begin{theorem}[one-more unforgeability, conditional]
+\label{thm:onemore}
+Assume ssHMLWE, binding and public rerandomizability of the common-message
+commitment of Section~\ref{sec:commonmessage}, and the standard hybrid steps
+of the BLNS23 proof architecture (response-proof simulation, key validation,
+correctness).  Then an attacker that completes $Q$ accepted issuances and
+makes $q_V$ presentation attempts presents valid credentials for $Q+1$
+pairwise distinct messages with probability at most
+\[
+ \operatorname{Adv}_{\mathrm{ssHMLWE}}
+ \;+\;\varepsilon_{\mathrm{fix}}
+ \;+\;\operatorname{Adv}_{\mathrm{bind}}
+ \;+\;q_V\,2^{-\nu}
+ \;+\;\varepsilon_{\mathrm{hyb}}
+ \;+\;\varepsilon_{\mathrm{corr}},
+\]
+where $\varepsilon_{\mathrm{fix}}$ collects the error terms of
+Theorem~\ref{thm:fixpoint} and $\nu$ is the min-entropy of the rounded value
+($\nu=d\log_2 p=128$ at the parameters of Section~\ref{sec:efficiency}).
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+Idealize every issuance response using ssHMLWE, losing
+$\operatorname{Adv}_{\mathrm{ssHMLWE}}+\varepsilon_{\mathrm{fix}}$.
+Thereafter lazy-sample the keyed function
+$x\mapsto\mathbf s^{T}H_R(x)$ as a random function at all fresh points;
+$\varepsilon_{\mathrm{hyb}}$ and $\varepsilon_{\mathrm{corr}}$ cover the
+uninstantiated simulation and correctness steps named in the statement.
+Consider a presented credential for a message $M'$ distinct from every
+issued message $M_j$.  Commitment binding gives
+$\mu_i'=\mathsf{Com}(M';\phi_i')\neq\mathsf{Com}(M_j;\phi_i^{(j)})$ for
+every issued session $j$ and every lane $i$, so each of the $\kappa$ lane
+inputs $(i,\mu_i',\rho_i')$ is a fresh point of the random function,
+regardless of the tags.  The required value is then the rounding of a sum of
+$\kappa$ independent fresh random values --- uniform, with min-entropy
+$\nu$ --- and each presentation attempt succeeds with probability at most
+$2^{-\nu}$.
+\end{proof}
+
+\paragraph{Status.}
+After this subsection, the open core of the construction is one sentence
+long: the pseudorandomness of the response stream (ssHMLWE), its quantum
+analogue, and the named simulation details.  Everything else --- the
+challenge game, the linear-attack surface, the pricing of residual control,
+key recovery, and the one-more counting --- is now a theorem or a reduction.
+This is weaker than a proof under a standard assumption, and the difference
+is real: ssHMLWE is a new, protocol-specific assumption, and the barrier
+paragraph above explains why the standard route cannot reach it.  But the
+assumption is minimal, decisional, and falsifiable, and its surrounding
+structure is proven.
 
 \subsection{Copying and combining responses}
 \label{sec:splicing}
@@ -920,9 +1190,11 @@ cost ends up at $2^{\kappa/2}$.  Second, the random-oracle analysis of
 Section~\ref{sec:romproof} shows that this figure is not an artifact of
 missing analysis: Lemma~\ref{lem:relation} stops protecting the construction
 exactly at $Q_h\,Q\,2^{-\kappa}\approx1$, that is, at $2^{\kappa/2}$ --- and
-the splice sits exactly there.  What the analysis does not give is a proof
-that no \emph{use} of such a relation (the one-more accounting of
-Section~\ref{sec:proofneeds}) is possible below it.
+the splice sits exactly there.  What the analysis does not give by itself is
+a bound on the \emph{uses} of such a relation below it;
+Section~\ref{sec:latticestep} supplies the pricing: committed relations are
+bounded by Lemma~\ref{lem:relation}, and relations found after the fact are
+module-SIS instances (Lemma~\ref{lem:lintest}).
 
 \subsection{Binding every lane to one message}
 \label{sec:commonmessage}
@@ -937,8 +1209,8 @@ construction, not as an option.  Without it, the cheapest attack we know
 (Section~\ref{sec:splicing}) produces a credential for a fresh, never-issued
 message vector at $2^{\kappa/2}$ work; with it, the same work produces only a
 duplicate of a credential that was already issued.  The mechanism is also a
-prerequisite for the one-more accounting that any proof would need
-(Section~\ref{sec:proofneeds}).
+prerequisite for the one-more accounting
+(Theorem~\ref{thm:onemore}).
 
 Use a commitment scheme that hides $M$,
 cannot be opened to two messages, and can be publicly rerandomized.  The user
@@ -990,10 +1262,12 @@ a deliberate privacy decision, and cross-context unlinkability would need a
 scoped image such as $H(M,\mathsf{scope})$, with the scope bound into the
 lane hash so that the verifier can still recompute the lane inputs.
 
-Three honest qualifications.  First, the demotion is itself only intuition:
-we know of no counting argument that would justify it rigorously here, and
-with a single key there is no fixed untouched lane on which such an argument
-could anchor.  Second, the binding does nothing against key recovery through
+Three honest qualifications.  First, the demotion is a conditional theorem
+(Theorem~\ref{thm:onemore}): its counting argument anchors on the commitment
+binding --- distinct messages force fresh lane commitments in every lane ---
+and on the structured-sum HMLWE assumption of Section~\ref{sec:latticestep},
+whose simulation details remain uninstantiated.  Second, the binding does
+nothing against key recovery through
 the fixpoint wall, which independently costs about $2^{\kappa/2}$: the
 parameter floor $\kappa=512$ stands whether or not duplicates are harmful.
 Third, the semantic cost is real but small.  The base construction already
@@ -1037,13 +1311,17 @@ request.  Cut-and-choose removed that proof, and the response relation gives
 a reduction nothing to replace it with: it cannot evaluate $\mathbf
 s^{T}\mathbf C_{\mathrm{sel}}$ on any input that is not a fresh hash image,
 and the peeled sum generally is not one.
+Section~\ref{sec:latticestep} sharpens the obstacle to one term: with a
+single key, the junk contribution $\mathbf s^{T}\mathbf w$ of an unopened,
+never-checked branch is exactly what no HMLWE-style oracle can supply.
  \item \textbf{Extraction handles.}  The leaf hashes commit to every branch,
 but only the opened preimages are ever revealed: the selected branches remain
 hidden behind their hashes, so no forking or seed-tag technique can recover
 them.  A proof would have to reintroduce extractable per-branch commitments
 with transmitted openings --- giving up peeling and much of the compactness
 --- or rely on the random-oracle analysis of Section~\ref{sec:romproof},
-which covers the challenge game but not the lattice step.
+which covers the challenge game, together with the isolated assumption of
+Section~\ref{sec:latticestep} for the lattice step.
  \item \textbf{Defense in depth.}  With one key, every lane's value lives
 under the same secret $\mathbf s$, so any lane vector can cancel any other:
 cross-lane cancellation is algebraically possible, and only its cost ---
@@ -1129,8 +1407,10 @@ therefore dominated by the seeded checks, not by the signing operation.
 \label{sec:proofneeds}
 
 The random-oracle analysis of Section~\ref{sec:romproof} proves the
-challenge-game content of the fixpoint property.  A full security proof of
-the construction would additionally need:
+challenge-game content of the fixpoint property, and
+Section~\ref{sec:latticestep} reduces the remaining goals to one decisional
+assumption.  A full security proof of the construction would additionally
+need:
 
 \begin{enumerate}
  \item \textbf{Extraction of selected branches.}  The BLNS23
@@ -1142,20 +1422,27 @@ whose selected preimages are never revealed, so partial extraction techniques
 this construction must either reintroduce individually committed branches
 with extractable openings --- giving up the aggregate's compactness --- or
 avoid extraction entirely.
- \item \textbf{A quantum random-oracle analysis, and target-set bounds.}
+ \item \textbf{A quantum random-oracle analysis.}
 The proof of Theorem~\ref{thm:fixpoint} samples the challenge classically at
 query time and takes union bounds over classical query transcripts; a quantum
 attacker queries in superposition, and the analysis needs compressed-oracle
-or equivalent techniques.  Separately, the bounds scale linearly with the
-committed target and relation sets: a proof of key-recovery resistance must
-bound how many peeled sums (or differences of peeled sums) key material is
-actually extractable from, in the presence of the correctness noise.
- \item \textbf{One-more accounting.}  Even with pseudorandom responses, the
-rectangle relation means responses combine.  A proof needs the common-message
-binding of Section~\ref{sec:commonmessage} (or an equivalent) and a counting
-argument that an extra distinct message forces a fresh secret-key evaluation
---- and no fixed untouched lane exists in this construction on which such an
-argument could be anchored.
+or equivalent techniques.  The quantum analogue of the structured-sum HMLWE
+assumption of Section~\ref{sec:latticestep} is open as well.
+ \item \textbf{Cryptanalysis or reduction of the lattice assumption.}
+Section~\ref{sec:latticestep} isolates the lattice step as structured-sum
+HMLWE and shows that no reduction from plain MLWE exists along known lines:
+the single key puts the committed junk term $\mathbf s^{T}\mathbf w$ out of
+reach of any HMLWE-style oracle.  What remains is direct cryptanalysis of the
+assumption --- the falsifiability criterion of
+Section~\ref{sec:latticestep} names what a break would look like --- or a
+fundamentally different reduction.
+ \item \textbf{One-more simulation details.}  The counting argument is now
+conditional (Theorem~\ref{thm:onemore}): with the common-message binding, an
+extra distinct message forces fresh lane commitments in every lane, and the
+required value is a rounding of fresh random-function values.  What remains
+are the hybrid pieces named in that theorem --- response-proof simulation,
+key validation, and the correctness bound --- instantiated for this
+construction.
  \item \textbf{Sessions and grinding hygiene.}  Session identifiers must never
 repeat within a key epoch, including under concurrency, rollback, and
 replication; the signer's fresh value must be in place before the user
@@ -1188,9 +1475,14 @@ $2^{\kappa/2}$ classical or $2^{\kappa/4}$ quantum work, its yield demoted to
 credential duplication by the common-message binding --- sit exactly where
 the bounds stop protecting the construction, while direct sum-to-target
 aiming is pushed far beyond reach by the
-size of the ring (Section~\ref{sec:wagner}).  What remains open is everything
-past the challenge game: the step from uncontrolled responses to lattice
-hardness, the quantum random-oracle extension, and the one-more accounting.
+size of the ring (Section~\ref{sec:wagner}).  Past the challenge game, the
+lattice step is now a single isolated assumption rather than an unanalyzed
+heuristic: structured-sum HMLWE, with key recovery and one-more
+unforgeability reduced to it, its linear-attack surface reduced to module-SIS
+or to the proven bounds, and a precise account of why no standard reduction
+reaches it (Section~\ref{sec:latticestep}).  What remains open is the
+assumption itself, its quantum analogue, and the simulation details of the
+one-more hybrids.
 We present the construction as a target for analysis, not for deployment.
 
 \begin{thebibliography}{9}
