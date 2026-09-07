@@ -9,6 +9,13 @@
 \newcommand{\R}{R_q}
 \newcommand{\sample}{\mathrel{\leftarrow\joinrel\$}}
 \newcommand{\roundp}[1]{\left\lceil #1\right\rfloor_p}
+\newcommand{\Adv}{\operatorname{Adv}}
+\newcommand{\Exp}{\mathbf{Exp}}
+\newcommand{\Gm}{\mathbf{G}}
+\newcommand{\Bad}{\mathsf{Bad}}
+\newcommand{\U}{\mathsf{U}}
+\renewcommand{\S}{\mathsf{S}}
+\newcommand{\Vrf}{\mathsf{V}}
 
 \newtheorem{theorem}{Theorem}[section]
 \newtheorem{lemma}[theorem]{Lemma}
@@ -35,30 +42,31 @@ fixed before the challenge exists.  The signer \emph{peels} the opened
 branches off the aggregate and signs the remaining sum.  The first message
 then carries one commitment vector, $\kappa$ seeds, and $\kappa$ hashes:
 with the BLNS23 keyed-verification parameters and $\kappa=512$ lanes, about
-$143$~KiB.  We give the construction, its correctness calculation, drawings
-of the exchange, and a random-oracle analysis of its security core.  The
-design's key property is \emph{structured-sum fixpoint hardness}: roughly,
-that no attacker can force the signed sum into a chosen shape without about
-$2^{\kappa/2}$ work.  We prove this property for the challenge game in the
-classical random-oracle model (Theorem~\ref{thm:fixpoint}): an attacker
-making $Q_h$ challenge-hash queries and completing $Q$ sessions aims a
-peeled sum at a committed target set $T$, or places two accepted sessions in
-a committed relation $T_{\mathrm{rel}}$, only with probability
+$143$~KiB.  We give the construction as a tuple of algorithms, its
+correctness calculation, drawings of the exchange, and a game-based
+random-oracle analysis of its security core.  The design's key property is
+\emph{structured-sum fixpoint hardness}: roughly, that no attacker can force
+the signed sum into a chosen shape without about $2^{\kappa/2}$ work.  We
+prove this property for the challenge game in the classical random-oracle
+model (Theorem~\ref{thm:fixpoint}): an attacker making $Q_h$ challenge-hash
+queries and completing $Q$ sessions aims a peeled sum at a committed target
+set $T$, or places two accepted sessions in a committed relation
+$T_{\mathrm{rel}}$, only with probability
 $O\bigl(Q_h\,(|T|+Q\,|T_{\mathrm{rel}}|)\,2^{-\kappa}\bigr)$, and every
 accepted session retains more than $\kappa/2$ honestly formed,
 challenge-selected branch vectors except with probability
 $Q_h\,2^{-\kappa/2}$.  The remaining lattice step is isolated as a single
 decisional assumption, \emph{structured-sum HMLWE}
-(Section~\ref{sec:latticestep}): key recovery reduces to it, linear
-distinguishing strategies reduce to module-SIS or to the proven bounds,
-residual control over the samples is priced by density, one-more
-unforgeability follows from it together with the common-message binding, and
-we explain why no reduction to plain MLWE can reach it.  The assumption
-itself, its quantum analogue, and the simulation details of the one-more
-hybrids remain open (Section~\ref{sec:proofneeds}).  Under that assumption
-the best attacks we know are the copying-and-combining attacks of
-Section~\ref{sec:splicing}, costing about $2^{\kappa/2}$ classical or
-$2^{\kappa/4}$ quantum work, so $\kappa=512$ is the starting point.
+(Game~\ref{game:sshmlwe}): key recovery reduces to it, linear distinguishing
+strategies reduce to module-SIS or to the proven bounds, residual control
+over the samples is priced by density, one-more unforgeability follows from
+it together with the common-message binding, and we explain why no reduction
+to plain MLWE can reach it.  The assumption itself, its quantum analogue, and
+the simulation details of the one-more hybrids remain open
+(Section~\ref{sec:proofneeds}).  Under that assumption the best attacks we
+know are the copying-and-combining attacks of Section~\ref{sec:splicing},
+costing about $2^{\kappa/2}$ classical or $2^{\kappa/4}$ quantum work, so
+$\kappa=512$ is the starting point.
 \end{abstract}
 
 \begin{center}
@@ -126,14 +134,16 @@ lattice hardness as a single decisional assumption, proving the links around
 it (Section~\ref{sec:latticestep}).
 
 \paragraph{Roadmap.}
-Section~\ref{sec:notation} fixes notation.  Section~\ref{sec:construction}
-gives the construction with drawings.  Section~\ref{sec:correctness} shows why
-honest credentials verify.  Section~\ref{sec:intuition} gives the security
-intuition and analysis: the commit-before-challenge order, the fixpoint wall,
-the sum-to-target (Wagner) analysis, a random-oracle proof of the fixpoint
-game, the isolation of the remaining lattice step, the splicing attacks and
-their costs, the common-message strengthening that demotes splicing to
-duplication, and blindness.  Section~\ref{sec:efficiency} estimates sizes.
+Section~\ref{sec:notation} fixes notation, including the game-playing
+conventions used throughout.  Section~\ref{sec:construction} gives the
+construction as a tuple of algorithms, with drawings.
+Section~\ref{sec:correctness} shows why honest credentials verify.
+Section~\ref{sec:intuition} gives the security analysis: the
+commit-before-challenge order, the fixpoint wall, the sum-to-target (Wagner)
+analysis, a random-oracle proof of the fixpoint game, the isolation of the
+remaining lattice step, the splicing attacks and their costs, the
+common-message strengthening that demotes splicing to duplication, and
+blindness.  Section~\ref{sec:efficiency} estimates sizes.
 Section~\ref{sec:proofneeds} lists what remains unproven.
 
 \section{Notation and basic tools}
@@ -155,12 +165,54 @@ issuance attempt, identified by a session identifier $\mathsf{sid}$ that names
 the protocol version, the issuer, and the key epoch, and carries fresh values
 from both parties.
 
+\paragraph{Games, actors, and advantages.}
+We use the game-playing convention.  The \emph{actors} are the user $\U$,
+the signer $\S$, and the verifier $\Vrf$, given as (interactive) algorithms;
+$\mathcal A$ denotes an adversary, and $\mathcal B$, $\mathcal D$ denote
+reductions built from it.  A \emph{game} $\Gm$ is a probabilistic
+experiment run with an adversary; we write
+$\Pr[\Gm_{\mathcal A}(\lambda)\Rightarrow b]$ for the probability that the
+experiment halts with output $b\in\{0,1\}$, taken over the random oracles,
+the challenger's coins, and $\mathcal A$'s coins.  The security parameter is
+$\lambda$, with $\kappa=\kappa(\lambda)$; all algorithms run in time
+polynomial in $\lambda$ unless stated otherwise, and attack costs are stated
+as query counts.  The \emph{advantage} of $\mathcal A$ in distinguishing two
+games $\Gm^{0},\Gm^{1}$ is
+\[
+ \Adv_{\mathcal A}^{0/1}(\lambda)
+ =\bigl|\Pr[\Gm^{0}_{\mathcal A}(\lambda)\Rightarrow 1]
+  -\Pr[\Gm^{1}_{\mathcal A}(\lambda)\Rightarrow 1]\bigr|.
+\]
+Query budgets are named as they appear: $Q_h$ challenge-hash queries, $Q$
+accepted issuance sessions, $Q_R$ total random-oracle queries, and $q_V$
+verification attempts.
+
 \section{The construction}
 \label{sec:construction}
 
+Formally, the scheme is a tuple of algorithms
+$(\mathsf{KeyGen},\U_{1},\S,\U_{2},\Vrf)$.  The signer runs
+$\mathsf{KeyGen}$: it samples the public matrix $B$, the secret
+$(\mathbf s,\mathbf e_{1})$ with $\|\mathbf s\|\le\beta_s$ and
+$\|\mathbf e_1\|\le\beta_e$, and a key $K$ for the error derivation, and
+publishes $\mathsf{pk}=(B,\mathbf t)$ with
+$\mathbf t^{T}=\mathbf s^{T}B+\mathbf e_{1}^{T}$.
+Issuance is the two-message interaction
+\[
+ \mathsf{msg}_{1}\leftarrow\U_{1}(\mathsf{pk},\mathsf{sid}),\qquad
+ (h,\pi_{\mathrm{resp}})\ \text{or}\ \bot\leftarrow
+   \S(\mathsf{sk},\mathsf{msg}_{1}),\qquad
+ \sigma\ \text{or}\ \bot\leftarrow
+   \U_{2}(\mathsf{st}_{\U},h,\pi_{\mathrm{resp}}),
+\]
+and presentation is checked by
+$\Vrf(\mathsf{sk},\sigma)\in\{0,1\}$.  The four subsections below define
+$\U_1$, the challenge derivation, $\S$, and the pair $(\U_2,\Vrf)$ in turn.
+
 \subsection{Preparing the branches}
 
-The user independently constructs two branches in each lane.  It samples a
+The user algorithm $\U_1$ independently constructs two branches in each lane.
+It samples a
 32-byte seed $z_{i,b}$ and expands it:
 \[
  (m_{i,b},\mathbf r_{i,b},\mathbf e_{2,i,b})
@@ -237,7 +289,7 @@ when $\chi_i=1$.}
 \subsection{One aggregate commitment and the challenge}
 \label{sec:aggregate}
 
-The user sums all $2\kappa$ branch vectors into one aggregate
+$\U_1$ sums all $2\kappa$ branch vectors into one aggregate
 \[
  \mathbf c_{\mathrm{agg}}=\sum_{i=0}^{\kappa-1}
  \bigl(\mathbf c_{i,0}+\mathbf c_{i,1}\bigr)\in\R^{n},
@@ -267,12 +319,12 @@ only then choose the aggregate so that the peeled sum equals a chosen vector
 encoding of the aggregate and the leaf list must be canonical and the domain
 separation labels fixed, so that the hash input has only one interpretation.
 
-The first message is
+The first message output by $\U_1$ is
 \[
- \mathsf{User}\longrightarrow\mathsf{Signer}:\quad
- \mathsf{sid},\ \mathbf c_{\mathrm{agg}},\
+ \mathsf{msg}_{1}=
+ \bigl(\mathsf{sid},\ \mathbf c_{\mathrm{agg}},\
  \{z_{i,\chi_i}\}_{i=0}^{\kappa-1},\
- \{\ell_{i,\,1-\chi_i}\}_{i=0}^{\kappa-1}.
+ \{\ell_{i,\,1-\chi_i}\}_{i=0}^{\kappa-1}\bigr).
 \]
 Note what is \emph{not} sent: the unopened branch vectors.  The opened leaves
 are recomputed from the seeds; the unopened leaves arrive as hashes only.
@@ -284,15 +336,15 @@ exists.
 \subsection{Peeling and the aggregate response}
 \label{sec:peeling}
 
-The signer expands every revealed seed, reconstructs each opened branch, and
-computes its leaf hash.  Together with the received unopened leaf hashes this
-reassembles the full leaf list, and the signer recomputes $\boldsymbol\chi$
-from the received aggregate and that list.  It checks that each reconstructed
-branch was formed for this session and lane (labels, session identifier,
-lattice equation, size bounds, encoding), and reconstructs the opened set
-$\{\mathbf c_{i,\chi_i}\}_i$.  If any check fails it stops without returning
-any secret-dependent value.  Otherwise it \emph{peels} the opened branches
-off the aggregate:
+The signer algorithm $\S$ expands every revealed seed, reconstructs each
+opened branch, and computes its leaf hash.  Together with the received
+unopened leaf hashes this reassembles the full leaf list, and $\S$
+recomputes $\boldsymbol\chi$ from the received aggregate and that list.  It
+checks that each reconstructed branch was formed for this session and lane
+(labels, session identifier, lattice equation, size bounds, encoding), and
+reconstructs the opened set $\{\mathbf c_{i,\chi_i}\}_i$.  If any check fails
+it returns $\bot$ without releasing any secret-dependent value.  Otherwise it
+\emph{peels} the opened branches off the aggregate:
 \[
  \mathbf C_{\mathrm{sel}}
  =\mathbf c_{\mathrm{agg}}-\sum_{i=0}^{\kappa-1}\mathbf c_{i,\chi_i}
@@ -303,7 +355,7 @@ $(m_i^*,\rho_i^*,\mathbf r_i^*,\mathbf e_{2,i}^*)$ for its contents.
 The signer never sees the selected vectors individually; it holds only their
 sum.
 
-The signer derives a small deterministic error from its secret key $K$ and the
+$\S$ derives a small deterministic error from its secret key $K$ and the
 complete received input,
 \[
  e=H_{D_e}(K,\mathsf{sid},\mathbf c_{\mathrm{agg}}),
@@ -392,8 +444,8 @@ proof.}
 
 \subsection{Finishing and presenting the credential}
 
-After checking the response proof, the user removes the blinding terms one
-branch at a time and rounds:
+After checking the response proof, the user algorithm $\U_2$ removes the
+blinding terms one branch at a time and rounds:
 \[
  v=\roundp{h-\mathbf t^{T}\sum_{i=0}^{\kappa-1}\mathbf r_i^*},
  \qquad
@@ -402,8 +454,8 @@ branch at a time and rounds:
 The selected seeds stay private even at presentation: a seed would reveal the
 blinding vectors and let the issuer match the credential to its issuance.
 
-At presentation, the verifier (which holds the same key) recomputes the
-expected value and accepts exactly when
+At presentation, the verifier algorithm $\Vrf$ (which holds the same key)
+recomputes the expected value and accepts exactly when
 \[
  v=\roundp{\mathbf s^{T}\sum_{i=0}^{\kappa-1}
         H_R(\mathsf{credential\mbox{-}lane},i,m_i^*,\rho_i^*)}.
@@ -442,6 +494,15 @@ error is a sum of $2\kappa+1$ small terms, so its size grows
 with the lane count (about $\sqrt{\kappa}$ in the typical randomized model,
 $\kappa$ in the worst case), and all terms
 share one secret $\mathbf s$ and one public-key error $\mathbf e_1$.
+Formally, correctness is the statement
+\[
+ \Pr\bigl[\Vrf(\mathsf{sk},\sigma)=1:\;
+   \mathsf{sk}\leftarrow\mathsf{KeyGen},\
+   \sigma\leftarrow\langle\U(\mathsf{pk}),\S(\mathsf{sk})\rangle\bigr]
+ \ge 1-\varepsilon_{\mathrm{corr}},
+\]
+over the oracles and the parties' coins, with
+$\varepsilon_{\mathrm{corr}}$ bounded by the rounding-failure analysis above.
 
 \section{Security analysis}
 \label{sec:intuition}
@@ -686,9 +747,24 @@ challenge hash is responsible for --- hiding, aiming, and committed relations
 between sessions.  What it does not cover is stated at the end.
 
 \paragraph{The game.}
-Model $G$, $H_\rho$, $H_R$, $H_{\mathrm{leaf}}$, and $H_{\mathrm{chal}}$ as
-independent random oracles, and assume the signer never repeats a session
-identifier.  Call a vector $\mathbf c\in\R^{n}$ \emph{openable at}
+The \emph{fixpoint experiment} $\Exp^{\mathrm{fix}}_{\mathcal A}(\lambda)$
+runs between a challenger (playing the signer) and an adversary $\mathcal A$:
+\begin{enumerate}
+ \item \textbf{Setup.}  The challenger samples independent random oracles
+$G$, $H_\rho$, $H_R$, $H_{\mathrm{leaf}}$, $H_{\mathrm{chal}}$, $H_{D_e}$,
+runs $\mathsf{KeyGen}$, hands $\mathcal A$ the public key, and enforces
+session-identifier uniqueness.
+ \item \textbf{Interaction.}  $\mathcal A$ may query the random oracles and,
+at any time, submit an issuance message $\mathsf{msg}_1$; the challenger runs
+$\S(\mathsf{sk},\mathsf{msg}_1)$ and returns its output (which may be
+$\bot$).
+ \item \textbf{Budgets.}  Write $Q_h$ for the number of challenge-oracle
+queries (a session submitted without such a query is answered at signing time
+and counted as one), $Q$ for the number of accepted sessions, and $Q_R$ for
+the total number of random-oracle queries.
+\end{enumerate}
+
+Call a vector $\mathbf c\in\R^{n}$ \emph{openable at}
 $(\mathsf{sid},i,b)$ relative to the attacker's query transcript if the
 transcript contains the full chain: a seed $z$ with
 $G(\mathsf{sid},i,b,z)=(m,\mathbf r,\mathbf e_2)$ inside the norm bounds,
@@ -702,10 +778,10 @@ the attacker either knows a preimage $\mathbf c_{i,b}$ with
 $H_{\mathrm{leaf}}(\mathsf{sid},i,b,\mathbf c_{i,b})=\ell_{i,b}$ or it does
 not; a position is \emph{open} if a preimage is known and openable at
 $(\mathsf{sid},i,b)$.  A lane is \emph{free} if both positions are open,
-\emph{risky} if exactly one is, and \emph{dead} if neither is.  The session
-is accepted exactly when the challenge position $\chi_i$ is open in every
-lane and the attacker produces the corresponding seeds; the peeled sum is
-then
+\emph{risky} if exactly one is, and \emph{dead} if neither is.  Write
+$\mathsf{acc}(X,\boldsymbol\chi)$ for the event that the challenge position
+$\chi_i$ is open in every lane and the attacker produces the corresponding
+seeds; the peeled sum is then
 \[
  \mathbf C_{\mathrm{sel}}(X,\boldsymbol\chi)
  =\mathbf c_{\mathrm{agg}}-\sum_{i=0}^{\kappa-1}\mathbf c_{i,\chi_i},
@@ -715,12 +791,9 @@ are openable, hence unique up to random-oracle collision.
 
 Two features of the model do all the work.  First, $\boldsymbol\chi(X)$ is
 uniform in $\{0,1\}^{\kappa}$ and independent of everything the attacker has
-seen before the query at $X$; a session submitted without such a query is
-answered at signing time and is counted as a query.  Second, the number of
+seen before the query at $X$.  Second, the number of
 committed inputs and openable chains the attacker can produce is bounded by
-its query count.  Write $Q_h$ for the number of challenge-oracle queries
-(including submitted sessions), $Q$ for the number of accepted sessions, and
-$Q_R$ for the total number of random-oracle queries.
+its query count.
 
 We condition throughout on two global events whose failure probabilities are
 negligible at the parameters of Section~\ref{sec:efficiency}:
@@ -738,14 +811,23 @@ $2^{\kappa}\,Q_R^{\,2\kappa+1}\,2^{-N}$ with
 $N=n\,d\,\lceil\log_2 q\rceil\approx904{,}704$, which is negligible for any
 $Q_R\ll 2^{N/(2\kappa)}\approx 2^{883}$.
 
+The experiment's three failure events are
+\begin{align*}
+ \Bad_{\mathrm{hide}}&:\ \text{some accepted session has at most $\kappa/2$
+   free lanes},\\
+ \Bad_{\mathrm{tgt}}&:\ \text{some accepted session's peeled sum lands in a
+   target set committed before its challenge query},\\
+ \Bad_{\mathrm{rel}}&:\ \text{two accepted sessions' peeled sums satisfy a
+   relation committed before the later session's challenge query}.
+\end{align*}
+
 \begin{lemma}[commit-then-challenge soundness]
 \label{lem:sound}
-For a committed input with $r$ risky lanes and no dead lane, the session is
-accepted with probability $2^{-r}$ over $\boldsymbol\chi$; a dead lane makes
-acceptance impossible.  Consequently
+For a committed input with $r$ risky lanes and no dead lane,
+$\Pr_{\boldsymbol\chi}[\mathsf{acc}(X,\boldsymbol\chi)]=2^{-r}$; a dead lane
+makes acceptance impossible.  Consequently
 \[
- \Pr\bigl[\text{some accepted session has fewer than }\kappa/2
- \text{ free lanes}\bigr]\;\le\;Q_h\,2^{-\kappa/2}.
+ \Pr[\Bad_{\mathrm{hide}}]\;\le\;Q_h\,2^{-\kappa/2}.
 \]
 \end{lemma}
 
@@ -760,8 +842,8 @@ $Q_h$ committed inputs.
 \end{proof}
 
 Lemma~\ref{lem:sound} is the quantitative form of
-Section~\ref{sec:hiding}.  Its content for what follows: outside a
-$Q_h\,2^{-\kappa/2}$ exception, every accepted session has more than
+Section~\ref{sec:hiding}.  Its content for what follows: outside
+$\Bad_{\mathrm{hide}}$, every accepted session has more than
 $\kappa/2$ free lanes, and its peeled sum can be written in the affine form
 \[
  \mathbf C_{\mathrm{sel}}(X,\boldsymbol\chi)
@@ -783,9 +865,11 @@ Fix a committed input $X$ and a target set $T\subseteq\R^{n}$, both chosen
 before the challenge query at $X$ (they may depend arbitrarily on the
 attacker's transcript so far).  Then, under distinctness,
 \[
- \Pr_{\boldsymbol\chi}\bigl[\text{accepted}\ \wedge\
+ \Pr_{\boldsymbol\chi}\bigl[\mathsf{acc}(X,\boldsymbol\chi)\ \wedge\
  \mathbf C_{\mathrm{sel}}(X,\boldsymbol\chi)\in T\bigr]
- \;\le\;|T|\,2^{-\kappa}.
+ \;\le\;|T|\,2^{-\kappa},
+ \qquad\text{hence}\qquad
+ \Pr[\Bad_{\mathrm{tgt}}]\le Q_h\,|T|\,2^{-\kappa}.
 \]
 \end{lemma}
 
@@ -809,10 +893,14 @@ the attacker does not commit but selects by rejection.
 Let session $1$ be accepted with peeled sum $\mathbf C_1$.  For any later
 committed input $X_2$ and any relation set $T_{\mathrm{rel}}\subseteq\R^{n}$
 committed together with $X_2$ --- after session $1$ completes, but before the
-challenge query at $X_2$ --- the probability that $X_2$ is accepted and
-$\mathbf C_2-\mathbf C_1\in T_{\mathrm{rel}}$ is at most
-$|T_{\mathrm{rel}}|\,2^{-\kappa}$ under distinctness.  Union over inputs and
-prior sessions: at most $Q_h\,Q\,|T_{\mathrm{rel}}|\,2^{-\kappa}$.
+challenge query at $X_2$ ---
+\[
+ \Pr\bigl[\mathsf{acc}(X_2,\boldsymbol\chi(X_2))\ \wedge\
+ \mathbf C_2-\mathbf C_1\in T_{\mathrm{rel}}\bigr]
+ \;\le\;|T_{\mathrm{rel}}|\,2^{-\kappa}
+\]
+under distinctness.  Union over inputs and prior sessions:
+$\Pr[\Bad_{\mathrm{rel}}]\le Q_h\,Q\,|T_{\mathrm{rel}}|\,2^{-\kappa}$.
 \end{lemma}
 
 \begin{proof}
@@ -827,15 +915,18 @@ commit time, session $1$ included.
 \label{thm:fixpoint}
 Let the signer enforce session-identifier uniqueness, and let
 $|T|$ and $|T_{\mathrm{rel}}|$ be the largest target and relation sets the
-attacker commits.  Then, except with probability
+attacker commits.  Then
 \[
+ \Pr\bigl[\Bad_{\mathrm{hide}}\vee\Bad_{\mathrm{tgt}}\vee
+ \Bad_{\mathrm{rel}}\bigr]
+ \;\le\;
  Q_h\,2^{-\kappa/2}
  \;+\;Q_h\,|T|\,2^{-\kappa}
  \;+\;Q_h\,Q\,|T_{\mathrm{rel}}|\,2^{-\kappa}
  \;+\;2^{\kappa}\,Q_R^{\,2\kappa+1}\,2^{-N}
- \;+\;O(Q_R^{2}\,2^{-256})
+ \;+\;O(Q_R^{2}\,2^{-256}),
 \]
-over the random oracles, every session the attacker completes satisfies:
+and outside this event every session the attacker completes satisfies:
 (i) its table has more than $\kappa/2$ free lanes, so its peeled sum is an
 affine image of the challenge over more than $\kappa/2$ honestly formed,
 session-fresh, hash-derived branch differences committed before the challenge
@@ -930,16 +1021,47 @@ be made explicit.
 
 \begin{center}
 \fbox{\parbox{0.92\linewidth}{\textbf{Structured-sum HMLWE (ssHMLWE).}
-In the model of Section~\ref{sec:romproof}, an attacker plays the issuance
-game of Section~\ref{sec:construction} against a challenger holding the
-signer key, with session-identifier uniqueness enforced.  In the \emph{real}
-game, each accepted session is answered by
-$h=\mathbf s^{T}\mathbf C_{\mathrm{sel}}+e$; in the \emph{ideal} game, each
-accepted session is answered by an independent uniform $h\sample\R$.
-The assumption: every classical attacker making polynomially many queries
-distinguishes the two games with advantage negligible beyond the error terms
-of Theorem~\ref{thm:fixpoint}.}}
+The two games $\Gm^{\mathrm{real}}_{\mathcal A}(\lambda)$ and
+$\Gm^{\mathrm{ideal}}_{\mathcal A}(\lambda)$ (Game~\ref{game:sshmlwe})
+differ only in the answer to an accepted session $j$: the real game returns
+$h_j=\mathbf s^{T}\mathbf C_{\mathrm{sel},j}+e_j$; the ideal game returns an
+independent uniform $h_j\sample\R$.  The assumption: for every classical
+probabilistic polynomial-time adversary $\mathcal A$,
+\[
+ \Adv^{\mathrm{ssHMLWE}}_{\mathcal A}(\lambda)
+ =\bigl|\Pr[\Gm^{\mathrm{real}}_{\mathcal A}(\lambda)\Rightarrow 1]
+  -\Pr[\Gm^{\mathrm{ideal}}_{\mathcal A}(\lambda)\Rightarrow 1]\bigr|
+ \;\le\;\varepsilon_{\mathrm{fix}}+\mathrm{negl}(\lambda),
+\]
+where $\varepsilon_{\mathrm{fix}}$ collects the error terms of
+Theorem~\ref{thm:fixpoint}.}}
 \end{center}
+
+\begin{figure}[t]
+\[
+\begin{array}{@{}l@{\hspace{8mm}}l@{}}
+\underline{\Gm^{\mathrm{real}}_{\mathcal A}(\lambda)} &
+\underline{\Gm^{\mathrm{ideal}}_{\mathcal A}(\lambda)} \\[2pt]
+\text{sample oracles }G,H_\rho,H_R,H_{\mathrm{leaf}},H_{\mathrm{chal}},
+ H_{D_e} & \text{same} \\
+(\mathsf{pk},\mathsf{sk})\leftarrow\mathsf{KeyGen};\ \text{enforce }
+ \mathsf{sid}\text{ uniqueness} & \text{same} \\
+b'\leftarrow\mathcal A^{H,\,\S(\mathsf{sk},\cdot)}(\mathsf{pk}),
+ \text{ where on accepted session } j:
+ & b'\leftarrow\mathcal A^{H,\,\S'(\mathsf{sk},\cdot)}(\mathsf{pk}),
+ \text{ where:} \\
+\quad h_j:=\mathbf s^{T}\mathbf C_{\mathrm{sel},j}+e_j,\quad
+ e_j=H_{D_e}(K,\mathsf{sid}_j,\mathbf c_{\mathrm{agg},j})
+ & \quad h_j\sample\R,\ \text{independent of }j\\
+\mathbf{return}\ b'\in\{0,1\} & \mathbf{return}\ b'\in\{0,1\}
+\end{array}
+\]
+\caption{The ssHMLWE games.  $\S'$ answers like $\S$ except that the
+aggregate response of every accepted session is replaced by an independent
+uniform ring element; opening checks, rejections, and the response-proof
+interface are unchanged.}
+\label{game:sshmlwe}
+\end{figure}
 
 Three remarks delimit the assumption.  First, it is purely decisional: it
 asserts pseudorandomness of the response stream and says nothing about
@@ -954,24 +1076,30 @@ precise sense made explicit after Lemma~\ref{lem:grind} below.
 
 \paragraph{Key recovery reduces to the assumption.}
 The first link needs no lattice machinery at all, because a candidate key
-can be checked against the attacker's own transcript.
+can be checked against the attacker's own transcript.  Define the
+key-recovery experiment $\Exp^{\mathrm{kr}}_{\mathcal A}(\lambda)$: run
+$\mathcal A$ in the real issuance game; $\mathcal A$ wins if it outputs
+$\hat{\mathbf s}=\mathbf s$.
 
 \begin{theorem}[keys are self-verifying]
 \label{thm:selfverify}
-Let $\mathcal A$ be an attacker in the real issuance game that outputs the
-signer key with probability $\delta$.  Then there is an ssHMLWE distinguisher
-with advantage at least
+For every adversary $\mathcal A$ with
+$\Pr[\Exp^{\mathrm{kr}}_{\mathcal A}(\lambda)\Rightarrow 1]=\delta$,
+there is an ssHMLWE distinguisher $\mathcal D$ with
+$\mathrm{Time}(\mathcal D)\le\mathrm{Time}(\mathcal A)+O(Q)$ inner products
+and
 \[
- \delta-\Bigl(\frac{2\beta_e+1}{q}\Bigr)^{d},
+ \Adv^{\mathrm{ssHMLWE}}_{\mathcal D}(\lambda)
+ \;\ge\;\delta-\Bigl(\frac{2\beta_e+1}{q}\Bigr)^{d},
 \]
 where $\beta_e$ is the response-error bound of Section~\ref{sec:peeling}.
 \end{theorem}
 
 \begin{proof}
-The distinguisher relays $\mathcal A$'s issuance sessions to its own
+$\mathcal D$ relays $\mathcal A$'s issuance sessions to its own
 challenger and reads every $\mathbf C_{\mathrm{sel}}$ off the transcript.
 When $\mathcal A$ outputs a candidate $\hat{\mathbf s}$, the distinguisher
-guesses ``real'' if and only if
+outputs $1$ (``real'') if and only if
 $\|h_j-\hat{\mathbf s}^{T}\mathbf C_{\mathrm{sel},j}\|_\infty\leq\beta_e$
 for the first accepted session $j$.  In the real game a correct key passes
 with probability one, since
@@ -997,11 +1125,11 @@ The next two lemmas constrain the second class.
 
 \begin{lemma}[closed cycles cost a search or a SIS solution]
 \label{lem:lintest}
-Consider a distinguisher that computes, from its final view, short
-coefficients $(\alpha_1,\ldots,\alpha_Q)\in\R^{Q}$, not all zero, and
-accepts when $\sum_j\alpha_j h_j$ is small.  In the ideal game this sum is
-uniform, so distinguishing requires the real-game sum to be small with
-noticeable probability.  Writing
+Consider a distinguisher $\mathcal A$ that computes, from its final view,
+short coefficients $(\alpha_1,\ldots,\alpha_Q)\in\R^{Q}$, not all zero, and
+outputs $1$ when $\bigl\|\sum_j\alpha_j h_j\bigr\|$ is small.  In the ideal
+game this sum is uniform, so $\mathcal A$'s advantage is bounded by the
+probability that the real-game sum is small.  Writing
 $\mathbf v=\sum_j\alpha_j\mathbf C_{\mathrm{sel},j}$, exactly one of the
 following holds:
 \begin{itemize}
@@ -1010,11 +1138,12 @@ $\mathbf s^{T}\mathbf v+\sum_j\alpha_je_j$ against uniform for a known
 $\mathbf v$: a decisional keyed-evaluation guess whose hardness is the
 ssHMLWE assumption itself, not an attack on it.
  \item[(ii)] $\mathbf v=0$, and the relation was fixed before the last
-involved challenge query.  Then the success probability is at most
-$Q_h\,Q\,|T_{\mathrm{rel}}|\,2^{-\kappa}$ by Lemma~\ref{lem:relation}, with
+involved challenge query.  Then
+$\Pr[\mathcal A\text{ succeeds}]\le
+Q_h\,Q\,|T_{\mathrm{rel}}|\,2^{-\kappa}$ by Lemma~\ref{lem:relation}, with
 $|T_{\mathrm{rel}}|$ counting the relations the attacker committed to.
  \item[(iii)] $\mathbf v=0$, and the relation was found only after all
-involved challenges were sampled.  Then the attacker has produced a short
+involved challenges were sampled.  Then $\mathcal A$ has produced a short
 kernel vector of the collected matrix
 $A=[\mathbf C_{\mathrm{sel},1}\,|\,\cdots\,|\,\mathbf C_{\mathrm{sel},Q}]$:
 a module-SIS solution on samples it could not aim.
@@ -1039,11 +1168,15 @@ degree of freedom: choosing which samples to keep.
 
 \begin{lemma}[residual control is priced by density]
 \label{lem:grind}
-Condition on the good events of Theorem~\ref{thm:fixpoint}.  Suppose the
-attacker keeps a session only when its peeled sum lands in a set $T$ chosen
-from its view --- possibly after the challenge query, as rejection sampling.
-Then the expected number of challenge queries per kept session is at least
-$2^{\kappa}/|T|$.
+Condition on the good events of Theorem~\ref{thm:fixpoint}.  Suppose
+$\mathcal A$ keeps a session only when its peeled sum lands in a set $T$
+chosen from its view --- possibly after the challenge query, as rejection
+sampling.  Then the expected number of challenge queries per kept session is
+at least $2^{\kappa}/|T|$:
+\[
+ \operatorname{E}[\text{queries per kept session}]
+ \;\ge\;\frac{2^{\kappa}}{|T|}.
+\]
 \end{lemma}
 
 \begin{proof}
@@ -1051,9 +1184,9 @@ Fix the committed input $X$.  Under distinctness, the reachable set
 $R_X=\{\mathbf C_{\mathrm{sel}}(X,\boldsymbol\chi)\}$ over acceptable
 $\boldsymbol\chi$ has size $2^{|F|}$, and $\boldsymbol\chi$ is uniform over
 $\{0,1\}^{\kappa}$, so one query lands in $T$ with probability
-$|T\cap R_X|\,2^{-\kappa}\leq |T|\,2^{-\kappa}$.  Discarding misses changes
+$p=|T\cap R_X|\,2^{-\kappa}\leq |T|\,2^{-\kappa}$.  Discarding misses changes
 nothing per query, and each kept session therefore costs at least
-$2^{\kappa}/|T|$ queries in expectation.
+$1/p\ge 2^{\kappa}/|T|$ queries in expectation.
 \end{proof}
 
 Lemma~\ref{lem:grind} prices every attempt to \emph{condition} the collected
@@ -1088,20 +1221,29 @@ property of the peeled sum.
 \paragraph{One-more unforgeability from the same assumption.}
 With the common-message binding of Section~\ref{sec:commonmessage}, the
 one-more accounting also reduces to ssHMLWE, up to simulation details that
-remain uninstantiated.
+remain uninstantiated.  Formally, the \emph{one-more experiment}
+$\Exp^{\mathrm{omuf}}_{\mathcal A}(\lambda)$ runs the issuance game with
+$\mathcal A$ and additionally gives it a verification oracle
+$\mathsf{Check}(M,\{\phi_i,\rho_i\}_{i},v)\in\{0,1\}$ implementing $\Vrf$'s
+computation.  Writing $Q$ for the number of accepted issuances and $q_V$ for
+the number of $\mathsf{Check}$ queries, $\mathcal A$ wins if it presents
+$Q+1$ tuples with pairwise distinct messages $M$ that $\mathsf{Check}$
+accepts.
 
 \begin{theorem}[one-more unforgeability, conditional]
 \label{thm:onemore}
 Assume ssHMLWE, binding and public rerandomizability of the common-message
 commitment of Section~\ref{sec:commonmessage}, and the standard hybrid steps
 of the BLNS23 proof architecture (response-proof simulation, key validation,
-correctness).  Then an attacker that completes $Q$ accepted issuances and
-makes $q_V$ presentation attempts presents valid credentials for $Q+1$
-pairwise distinct messages with probability at most
+correctness).  Then for every adversary $\mathcal A$ there exist
+$\mathcal B$ and $\mathcal B_{\mathrm{bind}}$, of essentially the same
+running time, such that
 \[
- \operatorname{Adv}_{\mathrm{ssHMLWE}}
+ \Pr\bigl[\Exp^{\mathrm{omuf}}_{\mathcal A}(\lambda)\Rightarrow1\bigr]
+ \;\le\;
+ \Adv^{\mathrm{ssHMLWE}}_{\mathcal B}(\lambda)
  \;+\;\varepsilon_{\mathrm{fix}}
- \;+\;\operatorname{Adv}_{\mathrm{bind}}
+ \;+\;\Adv^{\mathrm{bind}}_{\mathcal B_{\mathrm{bind}}}(\lambda)
  \;+\;q_V\,2^{-\nu}
  \;+\;\varepsilon_{\mathrm{hyb}}
  \;+\;\varepsilon_{\mathrm{corr}},
@@ -1113,7 +1255,7 @@ Theorem~\ref{thm:fixpoint} and $\nu$ is the min-entropy of the rounded value
 
 \begin{proof}[Proof sketch]
 Idealize every issuance response using ssHMLWE, losing
-$\operatorname{Adv}_{\mathrm{ssHMLWE}}+\varepsilon_{\mathrm{fix}}$.
+$\Adv^{\mathrm{ssHMLWE}}_{\mathcal B}+\varepsilon_{\mathrm{fix}}$.
 Thereafter lazy-sample the keyed function
 $x\mapsto\mathbf s^{T}H_R(x)$ as a random function at all fresh points;
 $\varepsilon_{\mathrm{hyb}}$ and $\varepsilon_{\mathrm{corr}}$ cover the
@@ -1173,8 +1315,12 @@ hidden, and thereby reproduces previous sessions' lane values inside new
 responses.  Splitting the lanes into two halves, two grinding sessions at
 $2^{\kappa/2}$ each produce the second and third corners, and the fourth is
 free: about $2^{\kappa/2}$ classical work, or $2^{\kappa/4}$ with generic
-quantum search.  This is the cheapest attack we know, and it sets the
-parameter floor: $\kappa=512$ for a $128$-bit post-quantum margin.
+quantum search.  Formally, the splice wins the one-more experiment
+$\Exp^{\mathrm{omuf}}$ of Section~\ref{sec:latticestep} as soon as
+$Q_h\,Q\,2^{-\kappa}\approx1$, which is exactly the boundary at which
+Lemma~\ref{lem:relation} stops protecting the construction.  This is the
+cheapest attack we know, and it sets the parameter floor: $\kappa=512$ for a
+$128$-bit post-quantum margin.
 Section~\ref{sec:commonmessage} shows how to demote the splice's yield from
 a fresh-message forgery to a duplicate of an already-issued credential; the
 floor stands even so, because key recovery through the fixpoint wall
@@ -1188,13 +1334,13 @@ before the challenge, and the challenge-dependent honest contributions
 re-impose one hidden-malformed-branch bit per canceled lane --- so the attack
 cost ends up at $2^{\kappa/2}$.  Second, the random-oracle analysis of
 Section~\ref{sec:romproof} shows that this figure is not an artifact of
-missing analysis: Lemma~\ref{lem:relation} stops protecting the construction
-exactly at $Q_h\,Q\,2^{-\kappa}\approx1$, that is, at $2^{\kappa/2}$ --- and
-the splice sits exactly there.  What the analysis does not give by itself is
-a bound on the \emph{uses} of such a relation below it;
-Section~\ref{sec:latticestep} supplies the pricing: committed relations are
-bounded by Lemma~\ref{lem:relation}, and relations found after the fact are
-module-SIS instances (Lemma~\ref{lem:lintest}).
+missing analysis: $\Pr[\Bad_{\mathrm{rel}}]$ reaches $1$ exactly at
+$Q_h\,Q\,2^{-\kappa}\approx1$, that is, at $2^{\kappa/2}$ --- and the splice
+sits exactly there.  What the analysis does not give by itself is a bound on
+the \emph{uses} of such a relation below it; Section~\ref{sec:latticestep}
+supplies the pricing: committed relations are bounded by
+Lemma~\ref{lem:relation}, and relations found after the fact are module-SIS
+instances (Lemma~\ref{lem:lintest}).
 
 \subsection{Binding every lane to one message}
 \label{sec:commonmessage}
@@ -1220,7 +1366,12 @@ seed-derived; $\mu_0$ is included in the challenge hash input; opened branches
 are checked to be correct rerandomizations; the lane hash becomes
 $H_R(\mathsf{credential\mbox{-}lane},i,\mu_{i,b},\rho_{i,b})$.  At
 presentation the user reveals $M$ and the selected randomness, and the
-verifier rebuilds every $\mu_i^*$.
+verifier rebuilds every $\mu_i^*$.  Formally, binding is the requirement
+that every adversary $\mathcal A$ has
+$\Adv^{\mathrm{bind}}_{\mathcal A}(\lambda)=\mathrm{negl}(\lambda)$ against
+the experiment in which $\mathcal A$ wins by outputting
+$(\mu,M,\phi,M',\phi')$ with $M\neq M'$ and
+$\mathsf{Com}(M;\phi)=\mu=\mathsf{Com}(M';\phi')$.
 
 The effect: a presented credential is consistent with exactly one message.
 A spliced credential must then reuse an already-issued message, since its
@@ -1287,11 +1438,22 @@ presentation the user reveals only messages, tags, and $v$; the tags $\rho_i^*$
 are one-way images of hidden branch material, and the presentation hash
 contains no session identifier.
 
-The intuitive hope is that a presented credential is statistically far from
+Formally, the game to analyze is the dishonest-signer blindness experiment
+$\Exp^{\mathrm{blind}}_{\mathcal A}(\lambda)$: $\mathcal A$, playing the
+signer, chooses a public key and runs two issuance sessions with the honest
+user algorithm $\U$ on inputs of its choice; the experiment hands $\mathcal A$
+the two resulting credentials $(\sigma_0,\sigma_1)$ in an order selected by a
+hidden bit $b\sample\{0,1\}$, and $\mathcal A$ outputs a guess $b'$.  The
+conjecture is
+\[
+ \Adv^{\mathrm{blind}}_{\mathcal A}(\lambda)
+ =\bigl|\Pr[b'=b]-\tfrac12\bigr|=\mathrm{negl}(\lambda).
+\]
+The intuitive support is that a presented credential is statistically far from
 any issuance view: the unblinded value differs from the signer's response by
 the term $\mathbf t^{T}\sum_i\mathbf r_i^*$, whose $\mathbf r_i^*$ never leave
-the user, and the tags are pseudorandom.  Making this precise against a
-dishonest issuer is real work that we do not do here: it needs a sound
+the user, and the tags are pseudorandom.  Making this precise is real work
+that we do not do here: it needs a sound
 zero-knowledge response proof (so a cheating signer cannot bias $h$), an
 account of failed and aborted requests, key-validation rules, and a statement
 about how the public matrix $B$ is generated.  Note that the leaf hashes of
@@ -1449,7 +1611,8 @@ replication; the signer's fresh value must be in place before the user
 computes the challenge.
  \item \textbf{Blindness.}  A dishonest-issuer privacy proof covering biased
 responses, failed requests, key validation, later presentation, and the
-leaf hashes of selected branches visible to the signer.
+leaf hashes of selected branches visible to the signer: the experiment
+$\Exp^{\mathrm{blind}}$ of the blindness subsection, carried through.
  \item \textbf{Parameters.}  A joint analysis of lattice hardness, the
 $\kappa$-term correctness error, rounding failure, and the $2^{\kappa/2}$ /
 $2^{\kappa/4}$ splice floor, together with the sum-to-target safety condition
