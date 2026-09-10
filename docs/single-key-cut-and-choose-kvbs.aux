@@ -1,0 +1,88 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{BLNS23}
+\citation{PCC22}
+\citation{BLNS23}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{2}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Roadmap.}{2}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Notation and basic tools}{2}{section.2}\protected@file@percent }
+\newlabel{sec:notation}{{2}{2}{Notation and basic tools}{section.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Games, actors, and advantages.}{3}{section*.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}The construction}{3}{section.3}\protected@file@percent }
+\newlabel{sec:construction}{{3}{3}{The construction}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Preparing the branches}{3}{subsection.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces One lane under the aggregate commitment. Both branches enter the single sum $\mathbf  c_{\mathrm  {agg}}$ and the leaf list; the challenge is taken over both, so the branch table is fixed before $\boldsymbol  \chi $ exists. The challenge bit $\chi _i$ elects which branch is opened and checked. The other branch is never transmitted or checked: only its leaf hash is sent, and its vector remains inside the aggregate. Roles reverse when $\chi _i=1$.}}{4}{figure.1}\protected@file@percent }
+\newlabel{fig:lane}{{1}{4}{One lane under the aggregate commitment. Both branches enter the single sum $\mathbf c_{\mathrm {agg}}$ and the leaf list; the challenge is taken over both, so the branch table is fixed before $\boldsymbol \chi $ exists. The challenge bit $\chi _i$ elects which branch is opened and checked. The other branch is never transmitted or checked: only its leaf hash is sent, and its vector remains inside the aggregate. Roles reverse when $\chi _i=1$}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}One aggregate commitment and the challenge}{4}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:aggregate}{{3.2}{4}{One aggregate commitment and the challenge}{subsection.3.2}{}}
+\citation{BS22}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Peeling and the aggregate response}{5}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:peeling}{{3.3}{5}{Peeling and the aggregate response}{subsection.3.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Finishing and presenting the credential}{5}{subsection.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Why honest credentials verify}{6}{section.4}\protected@file@percent }
+\newlabel{sec:correctness}{{4}{6}{Why honest credentials verify}{section.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Security analysis}{6}{section.5}\protected@file@percent }
+\newlabel{sec:intuition}{{5}{6}{Security analysis}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}The load-bearing order: commit before challenge}{6}{subsection.5.1}\protected@file@percent }
+\newlabel{sec:order}{{5.1}{6}{The load-bearing order: commit before challenge}{subsection.5.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Hiding malformed branches}{7}{subsection.5.2}\protected@file@percent }
+\newlabel{sec:hiding}{{5.2}{7}{Hiding malformed branches}{subsection.5.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Why chosen inputs seem out of reach: the fixpoint wall}{7}{subsection.5.3}\protected@file@percent }
+\newlabel{sec:fixpoint}{{5.3}{7}{Why chosen inputs seem out of reach: the fixpoint wall}{subsection.5.3}{}}
+\citation{Wag02}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Why not a sum-to-target attack?}{8}{subsection.5.4}\protected@file@percent }
+\newlabel{sec:wagner}{{5.4}{8}{Why not a sum-to-target attack?}{subsection.5.4}{}}
+\@writefile{toc}{\contentsline {paragraph}{The vector equality is exact, and the space is enormous.}{8}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Why the working attacks look different.}{9}{section*.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Caveats.}{9}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}A random-oracle proof of the fixpoint game}{9}{subsection.5.5}\protected@file@percent }
+\newlabel{sec:romproof}{{5.5}{9}{A random-oracle proof of the fixpoint game}{subsection.5.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{The game.}{9}{section*.6}\protected@file@percent }
+\newlabel{lem:sound}{{5.1}{10}{commit-then-challenge soundness}{theorem.5.1}{}}
+\newlabel{lem:target}{{5.2}{10}{target avoidance}{theorem.5.2}{}}
+\newlabel{lem:relation}{{5.3}{11}{committed-relation resistance}{theorem.5.3}{}}
+\newlabel{thm:fixpoint}{{5.4}{11}{structured-sum fixpoint hardness, classical ROM}{theorem.5.4}{}}
+\@writefile{toc}{\contentsline {paragraph}{Tightness.}{11}{section*.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{What is not covered.}{11}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.6}The lattice step: isolating the remaining assumption}{12}{subsection.5.6}\protected@file@percent }
+\newlabel{sec:latticestep}{{5.6}{12}{The lattice step: isolating the remaining assumption}{subsection.5.6}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why no standard reduction applies.}{12}{section*.9}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces The ssHMLWE games. $\mathsf  {S}'$ answers like $\mathsf  {S}$ except that the aggregate response of every accepted session is replaced by an independent uniform ring element; opening checks, rejections, and the response-proof interface are unchanged.}}{13}{figure.4}\protected@file@percent }
+\newlabel{game:sshmlwe}{{4}{13}{The ssHMLWE games. $\S '$ answers like $\S $ except that the aggregate response of every accepted session is replaced by an independent uniform ring element; opening checks, rejections, and the response-proof interface are unchanged}{figure.4}{}}
+\@writefile{toc}{\contentsline {paragraph}{Key recovery reduces to the assumption.}{13}{section*.10}\protected@file@percent }
+\newlabel{thm:selfverify}{{5.5}{13}{keys are self-verifying}{theorem.5.5}{}}
+\newlabel{lem:lintest}{{5.6}{13}{closed cycles cost a search or a SIS solution}{theorem.5.6}{}}
+\newlabel{lem:grind}{{5.7}{14}{residual control is priced by density}{theorem.5.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{What would break the assumption.}{15}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{One-more unforgeability from the same assumption.}{15}{section*.12}\protected@file@percent }
+\newlabel{thm:onemore}{{5.8}{15}{one-more unforgeability, conditional}{theorem.5.8}{}}
+\@writefile{toc}{\contentsline {paragraph}{Status.}{15}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.7}Copying and combining responses}{15}{subsection.5.7}\protected@file@percent }
+\newlabel{sec:splicing}{{5.7}{15}{Copying and combining responses}{subsection.5.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.8}Binding every lane to one message}{16}{subsection.5.8}\protected@file@percent }
+\newlabel{sec:commonmessage}{{5.8}{16}{Binding every lane to one message}{subsection.5.8}{}}
+\@writefile{toc}{\contentsline {paragraph}{What the verifier must store.}{17}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{$M$ as nullifier.}{17}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.9}Blindness intuition}{17}{subsection.5.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.10}What this construction gives up}{18}{subsection.5.10}\protected@file@percent }
+\newlabel{sec:givesup}{{5.10}{18}{What this construction gives up}{subsection.5.10}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Efficiency sketch}{18}{section.6}\protected@file@percent }
+\newlabel{sec:efficiency}{{6}{18}{Efficiency sketch}{section.6}{}}
+\@writefile{toc}{\contentsline {paragraph}{One aggregate commitment.}{19}{section*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Revealed seeds instead of openings.}{19}{section*.17}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Preliminary exact wire sizes in bytes at $\kappa =512$. The first message is about $142.5$~KiB, dominated by the single aggregate vector; the credential itself is about $32$~KiB. The response proof is not instantiated, so its size is excluded.}}{19}{table.1}\protected@file@percent }
+\newlabel{tab:wire}{{1}{19}{Preliminary exact wire sizes in bytes at $\kappa =512$. The first message is about $142.5$~KiB, dominated by the single aggregate vector; the credential itself is about $32$~KiB. The response proof is not instantiated, so its size is excluded}{table.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}What a proof would still need}{19}{section.7}\protected@file@percent }
+\newlabel{sec:proofneeds}{{7}{19}{What a proof would still need}{section.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{20}{section.8}\protected@file@percent }
+\bibcite{BLNS23}{1}
+\bibcite{PCC22}{2}
+\bibcite{BS22}{3}
+\bibcite{Wag02}{4}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces The two-message exchange. The user does all branch work offline and sends one aggregate vector, $\kappa $ seeds, and $\kappa $ leaf hashes. The signer's online work is: reassemble the leaf list and recompute the challenge, expand and check $\kappa $ opened branches, one subtraction per opened branch, one inner product under its single key, and one single-key proof.}}{22}{figure.2}\protected@file@percent }
+\newlabel{fig:flow}{{2}{22}{The two-message exchange. The user does all branch work offline and sends one aggregate vector, $\kappa $ seeds, and $\kappa $ leaf hashes. The signer's online work is: reassemble the leaf list and recompute the challenge, expand and check $\kappa $ opened branches, one subtraction per opened branch, one inner product under its single key, and one single-key proof}{figure.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces The fixpoint wall. Aiming the peeled sum at a target $\mathbf  w$ requires junk that cancels a challenge-dependent honest sum; the junk is committed before the challenge exists. Resolving the cycle is a search: guess the challenge pattern, set the junk accordingly, and hope the hash returns the guessed pattern.}}{23}{figure.3}\protected@file@percent }
+\newlabel{fig:fixpoint}{{3}{23}{The fixpoint wall. Aiming the peeled sum at a target $\mathbf w$ requires junk that cancels a challenge-dependent honest sum; the junk is committed before the challenge exists. Resolving the cycle is a search: guess the challenge pattern, set the junk accordingly, and hope the hash returns the guessed pattern}{figure.3}{}}
+\gdef \@abspage@last{23}
