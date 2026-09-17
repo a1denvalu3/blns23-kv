@@ -26,6 +26,13 @@ typename Ring<P>::Vec sample_ternary_vec(const Ring<P> &R, D &drbg);
 template <typename P, typename D>
 typename Ring<P>::Mat sample_uniform_mat(const Ring<P> &R, D &drbg);
 
+// Fill-style variants that write into caller-provided storage: at large
+// parameter sets (e.g. CutAndChooseParams) a Mat is ~13MB, too big for stack
+// temporaries.
+template <typename P, typename D>
+void sample_uniform_mat_into(const Ring<P> &R, D &drbg,
+                             typename Ring<P>::Mat &m);
+
 } // namespace blnskv
 
 // --- implementation --------------------------------------------------------
@@ -75,6 +82,14 @@ typename Ring<P>::Mat sample_uniform_mat(const Ring<P> &R, D &drbg) {
   for (auto &row : m)
     row = sample_uniform_vec<P>(R, drbg);
   return m;
+}
+
+template <typename P, typename D>
+void sample_uniform_mat_into(const Ring<P> &R, D &drbg,
+                             typename Ring<P>::Mat &m) {
+  for (auto &row : m)
+    for (auto &p : row)
+      p = sample_uniform<P>(R, drbg);
 }
 
 } // namespace blnskv

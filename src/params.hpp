@@ -18,7 +18,7 @@
 
 namespace blnskv {
 
-template <size_t D_, size_t K_, size_t NMOD_>
+template <size_t D_, size_t K_, size_t NMOD_, uint64_t ROUND_P_ = 2>
 struct Params {
   static constexpr size_t D = D_;       // ring degree (power of two)
   static constexpr size_t K = K_;       // number of ring elements per vector
@@ -26,7 +26,7 @@ struct Params {
 
   // Rounding: verification value v keeps the top ROUND_BITS of each
   // coefficient of s^T*u (out of log2(Q)).
-  static constexpr uint64_t ROUND_P = 2; // rounding modulus (power of two)
+  static constexpr uint64_t ROUND_P = ROUND_P_; // rounding modulus (power of two)
 
   static constexpr size_t LAMBDA = 128;       // target classical security bits
   static constexpr size_t RHO_BYTES = 32;     // 2*lambda bits
@@ -38,5 +38,12 @@ using ToyParams = Params<256, 4, 1>;
 // Paper-flavoured shape (larger dimension + wide Q via RNS). Still NOT a
 // validated secure parameter set -- placeholder for future analysis.
 using PaperShapeParams = Params<4096, 2, 3>;
+
+// Cut-and-choose KVBS shape (docs/single-key-cut-and-choose-kvbs.tex):
+// d=64, n=93, p=4 as in the paper. NMOD=3 gives log2(Q) = 186, wider than
+// the paper's 152 -- the closest the vendored 62-bit NFLlib primes allow.
+// The paper itself states the construction MUST NOT be deployed as a secure
+// credential system; see the header of cckvbs.hpp.
+using CutAndChooseParams = Params<64, 93, 3, 4>;
 
 } // namespace blnskv

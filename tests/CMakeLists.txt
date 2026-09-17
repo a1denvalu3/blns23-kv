@@ -10,6 +10,12 @@ add_executable(test_protocol test_protocol.cpp)
 target_link_libraries(test_protocol PRIVATE blnskv)
 add_test(NAME protocol COMMAND test_protocol)
 
+add_executable(test_cckvbs test_cckvbs.cpp)
+target_link_libraries(test_cckvbs PRIVATE blnskv)
+add_test(NAME cckvbs COMMAND test_cckvbs)
+# The paper-shape smoke run (kappa=64) takes tens of seconds of mock tooling.
+set_tests_properties(cckvbs PROPERTIES TIMEOUT 900)
+
 # LaBRADOR-backed pi2 adapter. One real prove (minutes under SDE) plus verify
 # replays; registered through the SDE launcher like labrador-smoke (SDE64 is
 # detected in the top-level CMakeLists). Skipped entirely when

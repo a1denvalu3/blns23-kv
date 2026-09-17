@@ -108,6 +108,9 @@ endif()
 add_executable(blnskv-demo examples/demo.cpp)
 target_link_libraries(blnskv-demo PRIVATE blnskv)
 
+add_executable(cc-demo examples/cc_demo.cpp)
+target_link_libraries(cc-demo PRIVATE blnskv)
+
 find_package(Threads REQUIRED)
 add_executable(blnskv-bench bench/bench_main.cpp)
 target_link_libraries(blnskv-bench PRIVATE blnskv Threads::Threads)
