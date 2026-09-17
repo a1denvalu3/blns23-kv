@@ -62,9 +62,18 @@ decisional assumption, \emph{structured-sum HMLWE}
 strategies reduce to module-SIS or to the proven bounds, residual control
 over the samples is priced by density, one-more unforgeability follows from
 it together with the common-message binding, and we explain why no reduction
-to plain MLWE can reach it.  The assumption itself, its quantum analogue, and
-the simulation details of the one-more hybrids remain open
-(Section~\ref{sec:proofneeds}).  Under that assumption the best attacks we
+to plain MLWE can reach it.  Blindness against a dishonest signer is carried
+through in the same style (Section~\ref{sec:blindness}): every hop is proven
+in the random-oracle model except one, isolated as \emph{short-decomposition
+indistinguishability} (SDI) --- deciding whether the peeled sum, minus the
+presented lane images, has a short decomposition under $B$ --- and SDI is
+also necessary, so blindness is sandwiched between SDI at width $1$ and at
+width $\kappa$ (Theorem~\ref{thm:blind}).  SDI is a normal-form decision-MLWE
+variant, but its best known attack, a dual lattice distinguisher, sits below
+the lane floor at the current parameters, so blindness rather than splicing
+may be the binding constraint.  The ssHMLWE assumption itself, the quantum
+analogues of both assumptions, and the simulation details of the one-more
+hybrids remain open (Section~\ref{sec:proofneeds}).  Under that assumption the best attacks we
 know are the copying-and-combining attacks of Section~\ref{sec:splicing},
 costing about $2^{\kappa/2}$ classical or $2^{\kappa/4}$ quantum work, so
 $\kappa=512$ is the starting point.
@@ -78,8 +87,12 @@ Theorem~\ref{thm:fixpoint}).  The remaining lattice step is isolated as one
 decisional assumption, structured-sum HMLWE, with the surrounding links
 proven: key recovery and one-more unforgeability reduce to it, and no
 reduction from a standard assumption is available along known lines
-(Section~\ref{sec:latticestep}).  The proof does not extend to quantum query
-access, the isolated assumption is unproven, and the one-more simulation
+(Section~\ref{sec:latticestep}).  Blindness is proven up to one further
+isolated assumption, short-decomposition indistinguishability, a normal-form
+decision-MLWE variant whose concrete costing at the current parameters may
+bind below the lane floor (Section~\ref{sec:blindness}).  The proof does not
+extend to quantum query
+access, the isolated assumptions are unproven, and the one-more simulation
 details are uninstantiated (Section~\ref{sec:proofneeds}).
 The scheme must not be deployed as a secure credential system.}}
 \end{center}
@@ -143,8 +156,9 @@ Section~\ref{sec:intuition} gives the security analysis: the
 commit-before-challenge order, the fixpoint wall, the sum-to-target (Wagner)
 analysis, a random-oracle proof of the fixpoint game, the isolation of the
 remaining lattice step, the splicing attacks and their costs, the
-common-message strengthening that demotes splicing to duplication, and
-blindness.  Section~\ref{sec:efficiency} estimates sizes.
+common-message strengthening that demotes splicing to duplication, and a
+blindness proof that isolates its remaining content as a second decisional
+assumption (Section~\ref{sec:blindness}).  Section~\ref{sec:efficiency} estimates sizes.
 Section~\ref{sec:proofneeds} lists what remains unproven.
 
 \section{Notation and basic tools}
@@ -1429,38 +1443,419 @@ the ordered lane list, so applications see one message either way; what is
 given up is only the ability to treat individual lanes as independently
 meaningful messages.
 
-\subsection{Blindness intuition}
+\subsection{Blindness}
+\label{sec:blindness}
 
 The signer sees: the session identifier, one aggregate vector, the $\kappa$
-opened seeds with their reconstructed branches, and the $\kappa$ hashes of the
-unopened branches.  It never sees the selected
-seeds, the selected blinding vectors, or the final rounded value.  At
-presentation the user reveals only messages, tags, and $v$; the tags $\rho_i^*$
-are one-way images of hidden branch material, and the presentation hash
-contains no session identifier.
+opened seeds with their reconstructed branches, and the $\kappa$ leaf hashes
+of the unopened branches.  It never sees the selected seeds, the selected
+blinding vectors, or the final rounded value; at presentation the user
+reveals only messages, tags, and $v$, and the presentation hash contains no
+session identifier.  This subsection carries the dishonest-signer blindness
+proof through, in the style of Section~\ref{sec:latticestep}: every step is
+proven in the classical random-oracle model except one, which is isolated as
+a single decisional assumption --- \emph{short-decomposition
+indistinguishability} (SDI) --- and that assumption is also \emph{necessary}:
+a decider breaks blindness on the spot (the tightness paragraph below).
+Unlike structured-sum HMLWE, SDI is close to a standard assumption, and the
+asymmetry has a clean source.  The unforgeability adversary builds its own
+branch tables, and the committed junk inside its peeled sums is exactly what
+no standard oracle can evaluate under $\mathbf s$; the blindness adversary
+faces an \emph{honest} user and knows the signing key, and what it cannot
+see is the user's blinding --- nothing else.
 
-Formally, the game to analyze is the dishonest-signer blindness experiment
-$\Exp^{\mathrm{blind}}_{\mathcal A}(\lambda)$: $\mathcal A$, playing the
-signer, chooses a public key and runs two issuance sessions with the honest
-user algorithm $\U$ on inputs of its choice; the experiment hands $\mathcal A$
-the two resulting credentials $(\sigma_0,\sigma_1)$ in an order selected by a
-hidden bit $b\sample\{0,1\}$, and $\mathcal A$ outputs a guess $b'$.  The
-conjecture is
+\paragraph{The one statistic that matters.}
+Fix a completed session and a presented credential
+$\sigma=((m_i^*,\rho_i^*)_{i=0}^{\kappa-1},v)$, both known to the signer.
+The signer holds
+$\mathbf C_{\mathrm{sel}}=\mathbf c_{\mathrm{agg}}-\sum_i\mathbf c_{i,\chi_i}$
+and recomputes
+$\mathbf U^*=\sum_i H_R(\mathsf{credential\mbox{-}lane},i,m_i^*,\rho_i^*)$.
+If $\sigma$ was produced by this session, then
+\[
+ \mathbf V\;:=\;\mathbf C_{\mathrm{sel}}-\mathbf U^*
+ \;=\;B\,\mathbf R^*+\mathbf E_2^*,
+ \qquad
+ \mathbf R^*=\sum_{i=0}^{\kappa-1}\mathbf r_i^*,
+ \qquad
+ \mathbf E_2^*=\sum_{i=0}^{\kappa-1}\mathbf e_{2,i}^*,
+\]
+so $\mathbf V$ has a \emph{short decomposition}: an image under the public
+matrix $B$ of a width-$\kappa$ sum of bounded vectors, plus a bounded error.
+If $\sigma$ came from a different session, then
+$\mathbf V=B\mathbf R^*+\mathbf E_2^*
+ +(\mathbf U^*_{\mathrm{self}}-\mathbf U^*)$,
+and the difference of two independent uniform vectors masks $\mathbf V$ to
+uniform over $\R^{n}$.  Linking a credential to its issuance session is
+therefore exactly the decision problem \emph{does this $\mathbf V\in\R^{n}$
+have a short decomposition?}  The rest of the subsection shows that every
+other statistic available to the signer is either erased by rounding (the
+response error and the correctness noise, Lemma~\ref{lem:boundary}) or
+priced by random-oracle preimage resistance (the seeds, the tags, the
+leaves, Lemma~\ref{lem:lane}), so that this decision problem is the whole
+of blindness.
+
+\paragraph{The experiment.}
+The \emph{dishonest-signer blindness experiment}
+$\Exp^{\mathrm{blind}}_{\mathcal A}(\lambda)$:
+\begin{enumerate}
+ \item $\mathcal A$, playing the signer, outputs a public key $\mathsf{pk}$
+(subject to (KV) below) and two distinct session identifiers
+$\mathsf{sid}_0,\mathsf{sid}_1$.
+ \item The experiment runs the honest user $(\U_1,\U_2)$ with $\mathcal A$
+in two issuance sessions on inputs $(\mathsf{pk},\mathsf{sid}_0)$ and
+$(\mathsf{pk},\mathsf{sid}_1)$ --- concurrently, if $\mathcal A$ wishes ---
+producing $\sigma_0,\sigma_1$, each possibly $\bot$.
+ \item If either $\sigma_j=\bot$, $\mathcal A$ is handed $(\bot,\bot)$;
+otherwise the experiment samples $b\sample\{0,1\}$ and hands $\mathcal A$
+$(\sigma_b,\sigma_{1-b})$.
+ \item $\mathcal A$ outputs $b'$ and wins if $b'=b$; its advantage is
+$\Adv^{\mathrm{blind}}_{\mathcal A}(\lambda)=|\Pr[b'=b]-\tfrac12|$.
+\end{enumerate}
+Three conventions are part of the model; the requirements paragraph below
+shows that each is load-bearing.
+\begin{itemize}
+ \item[(KV)] \emph{Key validation.}  The public matrix is derived from a
+public seed, $B=\mathsf{Expand}_B(\mathsf{seed}_B)$, with
+$\mathsf{Expand}_B$ modeled as a random oracle.  The response proof is
+knowledge-sound; the experiment runs the extractor on $\mathcal A$'s first
+verifying response proof and checks $\mathbf t^{T}=\mathbf s^{T}B+\mathbf
+e_1^{T}$, the norm bounds, and that some component of the extracted
+$\mathbf s$ is a unit in $\R$ (so that $\mathbf s^{T}\mathbf U$ is uniform
+for uniform $\mathbf U$).  Any failure aborts both sessions.
+ \item[(SID)] \emph{Session freshness, user side.}  The honest user rejects
+a session identifier it has been offered before.
+ \item[(ABORT)] \emph{Both-or-neither delivery.}  If either session fails
+--- a rejected proof, a malformed response, a failed check --- both
+credentials are replaced by $\bot$, and nothing about which session failed
+may leak, timing included.
+\end{itemize}
+
+\paragraph{The assumption.}
+\begin{center}
+\fbox{\parbox{0.92\linewidth}{\textbf{Short-decomposition
+indistinguishability (SDI).}
+Fix a width $w\in\{1,\ldots,\kappa\}$.  The games
+$\Gm^{\mathrm{struc}}_{\mathcal A}(\lambda,w)$ and
+$\Gm^{\mathrm{unif}}_{\mathcal A}(\lambda,w)$ (Game~\ref{game:sdi}) differ
+only in the challenge vector: the structured game returns
+$\mathbf y=B\mathbf R+\mathbf E_2$ with
+$(\mathbf R,\mathbf E_2)=\sum_{i=1}^{w}(\mathbf r_i,\mathbf e_{2,i})$
+a sum of $w$ honestly distributed branch vectors; the uniform game returns
+$\mathbf y\sample\R^{n}$.  The assumption: for every width $w$ and every
+classical probabilistic polynomial-time adversary $\mathcal A$,
+\[
+ \Adv^{\mathrm{SDI}(w)}_{\mathcal A}(\lambda)
+ =\bigl|\Pr[\Gm^{\mathrm{struc}}_{\mathcal A}(\lambda,w)\Rightarrow 1]
+  -\Pr[\Gm^{\mathrm{unif}}_{\mathcal A}(\lambda,w)\Rightarrow 1]\bigr|
+ \;\le\;\mathrm{negl}(\lambda).
+\]}}
+\end{center}
+
+\begin{figure}[H]
+\[
+\begin{array}{@{}l@{\hspace{8mm}}l@{}}
+\underline{\Gm^{\mathrm{struc}}_{\mathcal A}(\lambda,w)} &
+\underline{\Gm^{\mathrm{unif}}_{\mathcal A}(\lambda,w)} \\[2pt]
+\text{sample }B\text{ honestly (from the public seed)} & \text{same} \\
+(\mathbf r_i,\mathbf e_{2,i})_{i=1}^{w}
+ \text{ from the branch distributions} & --- \\
+\mathbf y:=B\sum_{i=1}^{w}\mathbf r_i+\sum_{i=1}^{w}\mathbf e_{2,i}
+ & \mathbf y\sample\R^{n} \\
+b'\leftarrow\mathcal A(B,\mathbf y) & b'\leftarrow\mathcal A(B,\mathbf y) \\
+\mathbf{return}\ b' & \mathbf{return}\ b'
+\end{array}
+\]
+\caption{The SDI games at width $w$.  The structured game's challenge is an
+honestly formed width-$w$ branch sum under the public matrix; the uniform
+game's is a random vector.}
+\label{game:sdi}
+\end{figure}
+
+Four remarks delimit the assumption.  First, SDI is single-instance decision
+module-LWE in normal form: $B$ is the public matrix, the secret $\mathbf R$
+and error $\mathbf E_2$ are short (width-$w$ sums of bounded distributions),
+and there are $n$ ring samples.  No barrier paragraph is needed here, in
+contrast to Section~\ref{sec:latticestep}: the hidden quantity is the honest
+user's blinding, formed exactly as the construction prescribes, so nothing
+blocks a reduction to a standard decision-MLWE instance along known lines
+(bounded, high-entropy secret and error distributions are handled by the
+usual re-randomization and robustness arguments); what is genuinely needed
+is the concrete costing below, not a new idea.  Second, the assumption is
+used at width $1$ in the proof (Theorem~\ref{thm:blind}) and at width
+$\kappa$ in the tightness direction; both ends matter, and at the parameters
+of Section~\ref{sec:efficiency} they are attacked at similar cost.  Third,
+the public matrix: $B$ is seed-derived, hence uniform; grinding the seed
+gives the adversary a choice among at most $Q_R$ uniform matrices, and the
+assumption is understood with this factor absorbed.  Fourth, the quantum
+analogue is open, as for ssHMLWE.
+
+\paragraph{Costing SDI.}
+This is a lattice-estimator question, and a preliminary look says it
+deserves care.  The generic decider is the \emph{dual distinguishing
+attack}: a vector $(\mathbf w,B^{T}\mathbf w\bmod q)$ of length $W$ in the
+rank-$2n$ module lattice $\{(\mathbf w,\mathbf z):\mathbf z=B^{T}\mathbf
+w\bmod q\}$ (dimension $2nd$ over $\mathbb Z$, determinant $q^{nd}$) gives
+the statistic
+$\langle\mathbf w,\mathbf y\rangle
+ =\langle B^{T}\mathbf w,\mathbf R\rangle+\langle\mathbf w,\mathbf E_2\rangle
+ \bmod q$,
+which for structured $\mathbf y$ is confined to roughly
+$\pm W\sqrt{w}\,(\beta_r+\beta_2)$ up to small constants (writing
+$\beta_r,\beta_2$ for the branch bounds) and is uniform for uniform
+$\mathbf y$, provided $\mathbf w$ has a component that is a unit in $\R$.
+Such vectors exist down to the Gaussian heuristic
+$W\approx q^{1/2}\sqrt{2nd/(2\pi e)}$, so a distinguishing vector exists
+whenever
+$\sqrt{w}\,(\beta_r+\beta_2)\,\sqrt{2nd/(2\pi e)}\lesssim q^{1/2}$
+--- a condition the parameters of Section~\ref{sec:efficiency} meet with a
+wide margin at every width $w\le\kappa$, because the branch bounds are tiny
+next to $\sqrt{q}$.  The attack's cost is therefore not the existence of
+the statistic but the lattice reduction that finds a good enough vector, in
+dimension $2nd=11{,}904$, with required quality set by
+$\log\bigl(q/(\sqrt{w}\,(\beta_r+\beta_2)\,\sqrt{nd})\bigr)$ rather than by
+$\kappa$'s exponential lane floor.  A preliminary sieve-cost estimate
+(Gaussian heuristic, blocksize in the mid hundreds; to be replaced by an
+LWE-estimator run~\cite{APS15}) puts the distinguishing attack on the order
+of $2^{160}$ classical and $2^{145}$ quantum operations.  That is above the
+$128$-bit target but \emph{below} the $2^{\kappa/2}$ lane floor: at the
+current parameters the cheapest attack on the construction may be this
+privacy attack, not the splice.  Exact costing, the module structure
+included, belongs to the parameter analysis (item~7 of
+Section~\ref{sec:proofneeds}).
+
+\paragraph{The theorem.}
+Write $B_n$ for the worst-case per-coefficient size of the correctness error
+of Section~\ref{sec:correctness} with the response error at its bound ---
+of order $\kappa(\beta_s\beta_2+\beta_e\beta_r)\,d$ --- adversarial choice
+of the response error included.
+
+\begin{lemma}[key pinning]
+\label{lem:pin}
+Except with probability
+$\varepsilon_{\mathrm{sound}}+\varepsilon_{\mathrm{pok}}$, every session that
+$\mathcal A$ completes in $\Exp^{\mathrm{blind}}$ satisfies
+$h=\mathbf s^{T}\mathbf C_{\mathrm{sel}}+e$ with $\|e\|\le\beta_e$ for a key
+$(\mathbf s,\mathbf e_1)$ that the experiment holds before the credentials
+are delivered, with $\mathbf t^{T}=\mathbf s^{T}B+\mathbf e_1^{T}$, the norm
+bounds, and some component of $\mathbf s$ a unit in $\R$.
+\end{lemma}
+
+\begin{proof}
+A verifying $\pi_{\mathrm{resp}}$ proves knowledge of
+$(\mathbf s,\mathbf e_1,e)$ satisfying $\mathcal R_{\mathrm{resp}}$; the
+experiment runs the extractor on $\mathcal A$'s first verifying proof and
+(KV)-checks the result; failure of the proof, the extraction, or the checks
+aborts both sessions by convention, and a session that aborts contributes
+exactly $1/2$ to the win probability under (ABORT).  Alternative valid
+representations of the same $\mathbf t$ differ by a short kernel element of
+$B$ and are handled as in Theorem~\ref{thm:selfverify}; the experiment fixes
+the extracted representation.
+\end{proof}
+
+\begin{lemma}[rounding erases the noise]
+\label{lem:boundary}
+Condition on Lemma~\ref{lem:pin}.  Except with probability
+$\varepsilon_{\mathrm{b}}\le 8\,d\,B_n\,p/q$ over the user's coins, every
+delivered credential satisfies
+\[
+ v=\roundp{\mathbf s^{T}\mathbf U^*},
+\]
+independent of the response error and of the correctness noise; and the
+event that exactly one of the two delivered credentials verifies is
+contained in the same boundary event, so validity patterns carry no
+information about $b$ outside $\varepsilon_{\mathrm{b}}$.
+\end{lemma}
+
+\begin{proof}
+By pinning,
+$v=\roundp{h-\mathbf t^{T}\mathbf R^*}
+ =\roundp{\mathbf s^{T}\mathbf U^*+\nu+e}$
+with $\nu=\mathbf s^{T}\mathbf E_2^*-\mathbf e_1^{T}\mathbf R^*$ (using
+$\mathbf t^{T}=\mathbf s^{T}B+\mathbf e_1^{T}$), and every coefficient of
+$\nu+e$ is at most $B_n$ in the worst case, adversarial $e$ at its bound
+included.  Since the extracted $\mathbf s$ has a unit component and
+$\mathbf U^*$ is uniform, $\mathbf s^{T}\mathbf U^*$ is uniform in $\R$; it
+lands within $B_n$ of a rounding boundary in a given coefficient with
+probability at most $2B_n\,p/q$.  Outside that event the rounding is
+unchanged by $\nu+e$.  Union over $d$ coefficients and two credentials.
+The verification equation compares $v$ with $\roundp{\mathbf s^{T}\mathbf
+U^*}$ exactly, so a credential fails to verify only inside the boundary
+event, and the event that exactly one of the two fails is a union of such
+events.
+\end{proof}
+
+Lemma~\ref{lem:boundary} is what makes a proof possible at all.  The
+response $h=\mathbf s^{T}\mathbf C_{\mathrm{sel}}+e$ is computed by the
+adversary and carries its per-session error $e$; without rounding, $v$ would
+fingerprint the session.  The rounding window is enormous next to the noise
+($q/p$ against $B_n$ per coefficient), so outside the boundary event the
+fingerprint is destroyed.
+
+\begin{lemma}[lane decoupling]
+\label{lem:lane}
+Fix a session and a lane $i$, and consider two adjacent hybrids.  In
+$\Gm^{(i-1)}$, lane $i$'s selected branch is honest: seed-generated, leaf
+hashed, its vector inside the aggregate.  In $\Gm^{(i)}$ it is
+\emph{virtual}: the experiment samples
+$(m_i^*,\rho_i^*,\mathbf u_i^*)$ at random, programs
+$H_R(\mathsf{credential\mbox{-}lane},i,m_i^*,\rho_i^*)=\mathbf u_i^*$,
+sends a uniform $\ell_i$, and replaces the branch's contribution to
+$\mathbf C_{\mathrm{sel}}$ by an independent uniform vector.  Then for every
+adversary $\mathcal A$ distinguishing the two hybrids with advantage
+$\delta$ there is an SDI$(1)$ distinguisher $\mathcal B$ of essentially the
+same running time with
+$\Adv^{\mathrm{SDI}(1)}_{\mathcal B}(\lambda)
+ \ge\delta-O(Q_R\,2^{-256})$.
+\end{lemma}
+
+\begin{proof}
+$\mathcal B$ receives $(B,\mathbf y^*)$ and simulates the hybrid.  It
+programs $\mathsf{Expand}_B$ on $\mathcal A$'s seed to output $B$ (the
+seed-grinding union is absorbed into SDI, as remarked above); it generates
+every other lane of both sessions honestly, opened and selected alike, as
+the hybrid prescribes; for lane $i$ it samples
+$(m_i^*,\rho_i^*,\mathbf u_i^*)$, programs $H_R$, computes
+$\ell_i=H_{\mathrm{leaf}}(\mathsf{sid},i,b_i^*,\mathbf y^*+\mathbf u_i^*)$
+by querying its own oracle in the structured case and samples $\ell_i$
+uniformly in the uniform case; it sets the lane's contribution to
+$\mathbf C_{\mathrm{sel}}$ to $\mathbf y^*+\mathbf u_i^*$, sets
+$\mathbf c_{\mathrm{agg}}=\mathbf C_{\mathrm{sel}}+\sum_i\mathbf
+c_{i,\chi_i}$, and programs $H_{\mathrm{chal}}$ on the assembled input to
+the challenge that opens the intended side of every lane.  At delivery it
+answers with the credential $v=\roundp{\mathbf s^{T}\mathbf U^*}$
+(Lemma~\ref{lem:boundary}), using the extracted key
+(Lemma~\ref{lem:pin}).  In the structured case this is exactly
+$\Gm^{(i-1)}$, in the uniform case exactly $\Gm^{(i)}$, unless one of two
+events occurs.  (a) $\mathcal A$ queries a random oracle at a point the
+simulation programmed, before that point exists: each programmed input
+carries at least $256$ fresh bits, so this costs $O(Q_R\,2^{-256})$.
+(b) $\mathcal A$ queries $G$, $H_\rho$, or $H_{\mathrm{leaf}}$ at lane
+$i$'s true preimage material, which would let it verify lane $i$ beyond
+what the hybrids prescribe: the seed, the tag $\rho_i^*$, and the leaf
+$\ell_i$ are each $256$-bit random-oracle images of material $\mathcal A$
+does not hold, and the aggregate is no help, since stripping lane $i$ out
+of $\mathbf C_{\mathrm{sel}}$ requires the other lanes' contributions ---
+virtual ones are uniform and unknown, honest ones are seed-locked --- so
+(b) is preimage finding against a $256$-bit image and costs
+$O(Q_R\,2^{-256})$.  Outside (a) and (b), $\mathcal A$'s distinguishing
+advantage is $\mathcal B$'s.
+\end{proof}
+
+\begin{lemma}[ideal world]
+\label{lem:ideal}
+With both sessions fully virtual (every lane decoupled), and conditioned on
+Lemmas~\ref{lem:pin} and~\ref{lem:boundary}, the adversary wins with
+probability exactly $1/2$.
+\end{lemma}
+
+\begin{proof}
+Each session's view is now
+$W=(\mathsf{sid},\ \text{opened branches},\ \{\ell_i\},\
+ \mathbf c_{\mathrm{agg}},\ \boldsymbol\chi,\ h)$
+with the opened branches honest and independent, the $\ell_i$ uniform, and
+$\mathbf C_{\mathrm{sel}}=\mathbf y+\mathbf U^*$ with $\mathbf y$ uniform
+and independent of everything else; $h=\mathbf s^{T}\mathbf
+C_{\mathrm{sel}}+e$ is a function of $\mathbf C_{\mathrm{sel}}$ and
+$\mathcal A$'s own short $e$, which $\mathcal A$ chose before the
+credential material $(m_i^*,\rho_i^*)$ was fixed anywhere in its view.  The
+credential is $C=((m_i^*,\rho_i^*)_i,\ v=\roundp{\mathbf s^{T}\mathbf
+U^*})$.  Conditioned on $C$, the vector $\mathbf C_{\mathrm{sel}}=\mathbf
+y+\mathbf U^*$ is uniform (over $\mathbf y$), so $(\mathbf
+C_{\mathrm{sel}},h)$ --- and with it $\mathbf c_{\mathrm{agg}}$,
+$\boldsymbol\chi$, and the whole view --- is independent of $C$.  Each
+session therefore contributes a pair $(W_j,C_j)$ with $W_j\perp C_j$, the
+two pairs are independent and identically distributed, and the adversary
+receives $(W_0,W_1,C_b,C_{1-b})$.  Swapping $b$ exchanges the second
+components of two independent identically distributed pairs, which leaves
+the distribution unchanged; every strategy has $\Pr[b'=b]=1/2$.  If either
+session aborted, the delivery is $(\bot,\bot)$ and the same statement holds
+trivially.
+\end{proof}
+
+\begin{theorem}[dishonest-signer blindness, conditional]
+\label{thm:blind}
+Assume SDI at width $1$ (Game~\ref{game:sdi}); assume the response proof is
+knowledge-sound for $\mathcal R_{\mathrm{resp}}$, with soundness and
+extraction errors $\varepsilon_{\mathrm{sound}}$ and
+$\varepsilon_{\mathrm{pok}}$; and assume (KV), (SID), (ABORT).  Then for
+every adversary $\mathcal A$ in $\Exp^{\mathrm{blind}}$ making at most
+$Q_R$ random-oracle queries there is a reduction $\mathcal B$, of
+essentially the same running time, with
 \[
  \Adv^{\mathrm{blind}}_{\mathcal A}(\lambda)
- =\bigl|\Pr[b'=b]-\tfrac12\bigr|=\mathrm{negl}(\lambda).
+ \;\le\;
+ 2\kappa\,\Adv^{\mathrm{SDI}(1)}_{\mathcal B}(\lambda)
+ \;+\;\varepsilon_{\mathrm{sound}}+\varepsilon_{\mathrm{pok}}
+ \;+\;\varepsilon_{\mathrm{b}}
+ \;+\;O\!\bigl((\kappa Q_R+Q_R^{2})\,2^{-256}\bigr).
 \]
-The intuitive support is that a presented credential is statistically far from
-any issuance view: the unblinded value differs from the signer's response by
-the term $\mathbf t^{T}\sum_i\mathbf r_i^*$, whose $\mathbf r_i^*$ never leave
-the user, and the tags are pseudorandom.  Making this precise is real work
-that we do not do here: it needs a sound
-zero-knowledge response proof (so a cheating signer cannot bias $h$), an
-account of failed and aborted requests, key-validation rules, and a statement
-about how the public matrix $B$ is generated.  Note that the leaf hashes of
-the selected branches, though visible to the signer, are one-way images of
-vectors the signer never learns, and are session-bound; whether they
-nevertheless weaken unlinkability is part of the work just named.
+\end{theorem}
+
+\begin{proof}
+Chain the lemmas.  Lemma~\ref{lem:pin} pins the key and the responses at
+cost $\varepsilon_{\mathrm{sound}}+\varepsilon_{\mathrm{pok}}$, with aborted
+sessions contributing exactly $1/2$ under (ABORT).
+Lemma~\ref{lem:boundary} replaces every delivered credential by
+$v=\roundp{\mathbf s^{T}\mathbf U^*}$ at cost $\varepsilon_{\mathrm{b}}$ and
+disposes of validity-pattern strategies.  Then apply
+Lemma~\ref{lem:lane} lane by lane across both sessions: $2\kappa$ hops,
+each costing $\Adv^{\mathrm{SDI}(1)}+O(Q_R\,2^{-256})$, after which both
+sessions are fully virtual and Lemma~\ref{lem:ideal} gives
+$\Pr[b'=b]=1/2$.  Collecting terms gives the bound; concurrency is no
+obstacle, since every hop's reduction answers $\mathcal A$'s queries
+online.
+\end{proof}
+
+\paragraph{Tightness: SDI is necessary, and it may bind below the lane
+floor.}
+An SDI$(\kappa)$ decider breaks blindness outright: given the two sessions
+and the two delivered credentials, compute
+$\mathbf V_{jk}=\mathbf C_{\mathrm{sel},j}-\mathbf U^*_k$ for
+$j,k\in\{0,1\}$; the matched pair is structured, the crossed pair is
+uniform-masked, and deciding which is which is SDI at width $\kappa$.  So
+blindness for this construction is sandwiched between SDI at width $1$
+(sufficient, Theorem~\ref{thm:blind}) and SDI at width $\kappa$ (necessary)
+--- the two ends of one parametric assumption, attacked at similar cost by
+the dual distinguisher of the costing paragraph.  In particular the leaf
+hashes of the selected branches, though visible to the signer, do not
+weaken unlinkability beyond SDI: they are one-way images of seed-locked
+material, and Lemma~\ref{lem:lane} prices every attempt to open them at
+$2^{-256}$ per query.  What the proof cannot repair is the statistic itself:
+if the dual distinguishing attack of the costing paragraph is as cheap as
+estimated there, it links presentations to issuance sessions below the
+lane floor, and blindness --- not the splice --- is the binding constraint
+of the construction at the parameters of Section~\ref{sec:efficiency}.
+
+\paragraph{A statistical variant.}
+The lane-decoupling hops are the only computational steps of the proof, and
+they become statistical if the branch error is wide: once a single branch's
+$\mathbf e_2$ has width within a small factor of $\sqrt{q}\,/\,\sqrt{2nd}$,
+the distribution of $B\mathbf r+\mathbf e_2$ is within negligible
+statistical distance of uniform over $\R^{n}$ by the standard smoothing
+argument~\cite{MR04}, Lemma~\ref{lem:lane} comes free at every lane, and
+blindness holds unconditionally in the random-oracle model.  The price is
+correctness slack: the correctness error inherits the wider $\mathbf e_2$,
+several dozen bits per coefficient against the same rounding window, which
+the parameters of Section~\ref{sec:efficiency} do not have; restoring the
+same rounding-failure bound would mean growing $q$ by roughly that amount
+(on the order of $30$--$40\%$ more commitment bandwidth).  Whether the
+trade is worth it belongs to the same parameter analysis.
+
+\paragraph{What an implementation must enforce.}
+The three conventions are load-bearing.  Without (KV) the adversary plants
+a key whose $B$ has a trapdoor, or whose $\mathbf s$ is a zero divisor in
+every component so that $\mathbf s^{T}\mathbf U^*$ is constant and the
+rounding erases nothing.  Without (SID) the two users' hash domains are no
+longer separated by their identifiers and the per-session programming in
+Lemma~\ref{lem:lane} is unjustified (the unforgeability side needs session
+uniqueness for much stronger reasons, Section~\ref{sec:splicing}).  Without
+(ABORT), failing exactly one session on purpose --- one malformed $h$ ---
+reveals $b$ from the delivery pattern alone.  The response proof must be a
+proof of knowledge, since Lemmas~\ref{lem:boundary} and~\ref{lem:lane}
+compute with the extracted key; its zero-knowledge property is not needed
+here, because the proof covers values the adversary already holds, though
+it is needed on the unforgeability side.
 
 \subsection{What this construction gives up}
 \label{sec:givesup}
@@ -1610,12 +2005,20 @@ construction.
 repeat within a key epoch, including under concurrency, rollback, and
 replication; the signer's fresh value must be in place before the user
 computes the challenge.
- \item \textbf{Blindness.}  A dishonest-issuer privacy proof covering biased
-responses, failed requests, key validation, later presentation, and the
-leaf hashes of selected branches visible to the signer: the experiment
-$\Exp^{\mathrm{blind}}$ of the blindness subsection, carried through.
+ \item \textbf{The blindness assumption.}  Section~\ref{sec:blindness}
+carries the dishonest-signer blindness proof through: every hop is proven
+except short-decomposition indistinguishability (Game~\ref{game:sdi}),
+which is necessary as well as sufficient.  What remains is a reduction of
+SDI to a standard decision-MLWE instance (robustness bookkeeping for the
+width-$w$ sum distributions), its concrete costing against the dual
+distinguishing attack --- at face value below the lane floor, and so
+possibly the binding constraint of the whole construction --- its quantum
+analogue, and enforcement of the operational conventions (KV), (SID),
+(ABORT).
  \item \textbf{Parameters.}  A joint analysis of lattice hardness, the
-$\kappa$-term correctness error, rounding failure, and the $2^{\kappa/2}$ /
+$\kappa$-term correctness error, rounding failure, the SDI distinguishing
+cost of Section~\ref{sec:blindness} --- the dual attack in dimension $2nd$,
+which at face value binds below the lane floor --- and the $2^{\kappa/2}$ /
 $2^{\kappa/4}$ splice floor, together with the sum-to-target safety condition
 $N\gg\kappa\,(1+\log_2\kappa)$ of Section~\ref{sec:wagner};
 $\kappa=512$ is a starting point, not an analysis.
@@ -1647,6 +2050,13 @@ or to the proven bounds, and a precise account of why no standard reduction
 reaches it (Section~\ref{sec:latticestep}).  What remains open is the
 assumption itself, its quantum analogue, and the simulation details of the
 one-more hybrids.
+On the privacy side, blindness is now a theorem up to a second isolated
+assumption --- short-decomposition indistinguishability, necessary as well
+as sufficient --- and its best known attack, a dual distinguishing attack
+on the peeled sum, costs less than the lane floor at the current parameters:
+the privacy side, not the forgery side, may set the real floor, and costing
+it exactly is part of the remaining parameter work
+(Section~\ref{sec:blindness}).
 We present the construction as a target for analysis, not for deployment.
 
 \begin{thebibliography}{9}
@@ -1675,6 +2085,18 @@ D.~Wagner.
 \newblock A Generalized Birthday Problem.
 \newblock CRYPTO 2002, LNCS vol.~2442, pp.~288--303, 2002.
 \newblock \url{https://doi.org/10.1007/3-540-45708-9_19}.
+
+\bibitem{APS15}
+M.~R.~Albrecht, R.~Player, and S.~Scott.
+\newblock On the Concrete Hardness of Learning with Errors.
+\newblock Journal of Mathematical Cryptology 9(3), pp.~169--203, 2015.
+\newblock \url{https://doi.org/10.1515/jmc-2015-0016}.
+
+\bibitem{MR04}
+D.~Micciancio and O.~Regev.
+\newblock Worst-Case to Average-Case Reductions based on Gaussian Measures.
+\newblock FOCS 2004, pp.~372--381, 2004.
+\newblock \url{https://doi.org/10.1109/FOCS.2004.72}.
 
 \end{thebibliography}
 

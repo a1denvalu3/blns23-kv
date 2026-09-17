@@ -1,0 +1,52 @@
+@page {
+  size: 1280px 720px;
+  margin: 0;
+}
+
+html, body {
+  width: 1280px;
+  margin: 0;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+#root { position: static; }
+nav, .progress { display: none !important; }
+
+.slide, .slide-content, .slide-content * {
+  opacity: 1 !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+.slide {
+  position: relative;
+  inset: auto;
+  width: 1280px;
+  height: 720px;
+  align-items: center;
+  overflow: visible;
+  break-inside: avoid;
+  break-after: page;
+}
+
+.slide:last-of-type { break-after: auto; }
+
+.slide-content {
+  max-width: 1120px;
+  margin: 0;
+  padding: 32px 40px 48px;
+}
+
+.slide::after {
+  content: attr(data-page) " / " attr(data-total);
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.math-block { overflow: visible; }

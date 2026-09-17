@@ -1,0 +1,275 @@
+:root {
+  --dark: #1c1028;
+  --purple: #6c5fc7;
+  --purple-light: #b5aade;
+  --purple-bg: #ede8f5;
+  --bg: #faf9fb;
+  --card: #f3f1f5;
+  --muted: #80708f;
+  --border: #dbd6e1;
+  --semantic-green: #2ba185;
+  --semantic-red: #f55459;
+  --semantic-amber: #d4953a;
+  --semantic-green-bg: #e0f5ef;
+  --semantic-red-bg: #fde8e9;
+  --semantic-amber-bg: #fdf3e4;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Rubik', system-ui, -apple-system, sans-serif;
+  color: var(--dark);
+  background: var(--bg);
+  line-height: 1.7;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+#root { position: fixed; inset: 0; }
+
+h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 12px; }
+h2 { font-size: 1.55rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 10px; }
+h3 { font-size: 1rem; font-weight: 600; margin: 0 0 6px; }
+.subtitle { font-size: 0.95rem; font-weight: 400; max-width: 640px; color: var(--muted); margin: 0 0 20px; }
+p { margin: 0 0 10px; }
+ul { margin: 6px 0; padding-left: 20px; }
+li { margin-bottom: 5px; }
+
+.progress {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: var(--purple); transition: width 0.3s; z-index: 10;
+}
+
+.slide {
+  position: absolute; inset: 0 0 60px;
+  display: flex; align-items: flex-start; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.45s ease;
+  overflow: auto;
+}
+.slide.active { opacity: 1; pointer-events: auto; }
+
+.slide-content {
+  width: 100%; max-width: 920px;
+  flex-shrink: 0;
+  margin-block: auto;
+  padding: 40px;
+}
+
+.tag {
+  display: inline-block; font-size: 0.66rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 4px 10px; border-radius: 4px;
+  margin-bottom: 8px;
+}
+.tag-purple { background: var(--purple-bg); color: var(--purple); }
+.tag-red { background: var(--semantic-red-bg); color: var(--semantic-red); }
+.tag-green { background: var(--semantic-green-bg); color: var(--semantic-green); }
+.tag-amber { background: var(--semantic-amber-bg); color: var(--semantic-amber); }
+
+.cols { display: flex; gap: 32px; }
+.col { flex: 1; min-width: 0; }
+
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cards.three { grid-template-columns: 1fr 1fr 1fr; }
+.card {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px;
+}
+.card h3 { display: flex; align-items: center; gap: 8px; }
+.card .material-symbols-outlined { color: var(--purple); font-size: 1.2rem; }
+
+.chart-wrap { max-width: 920px; margin: 0 auto; }
+
+/* ── math (KaTeX) ── */
+.katex { font-size: 1.02em; }
+.math {
+  background: var(--purple-bg);
+  padding: 1px 6px; border-radius: 4px;
+  display: inline-block;
+}
+.math-block {
+  display: block;
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 18px; margin: 10px 0;
+  overflow-x: auto;
+}
+.math-block .katex-display { margin: 2px 0; }
+.math-block .katex { font-size: 0.98em; }
+
+/* ── introductory LWE slides ── */
+.lesson-equation .math-block {
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+.lesson-equation .katex { font-size: 1.25em; }
+.slide-source { margin: 12px 0 0; font-size: 0.7rem; color: var(--muted); }
+.slide-source a { color: inherit; text-underline-offset: 3px; }
+.slide-source a:hover { color: var(--purple); }
+.handshake-subtitle { max-width: none; }
+.handshake .actor .math { background: none; }
+.handshake .local { text-align: center; }
+.exchange-label { font-size: 0.8rem; color: var(--muted); text-align: center; }
+
+/* ── game box ── */
+.game {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0;
+}
+.game .side {
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px 16px;
+}
+.game .side h4 {
+  margin: 0 0 6px; font-size: 0.78rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.game .side.real h4 { color: var(--purple); }
+.game .side.ideal h4 { color: var(--semantic-amber); }
+.game .side .gline {
+  display: block; font-size: 0.88rem; line-height: 2;
+}
+
+/* ── cut-and-choose lane diagram ── */
+.cc { display: flex; align-items: stretch; gap: 10px; margin: 14px 0; }
+.cc .branch {
+  flex: 1; background: #fff; border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px; text-align: center;
+}
+.cc .branch .b-name { font-weight: 600; font-size: 0.85rem; }
+.cc .branch .b-state {
+  font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; margin-top: 6px;
+}
+.cc .branch.opened { border-color: var(--semantic-green); background: var(--semantic-green-bg); }
+.cc .branch.opened .b-state { color: var(--semantic-green); }
+.cc .branch.used { border-color: var(--purple); background: var(--purple-bg); }
+.cc .branch.used .b-state { color: var(--purple); }
+.cc .cc-arrow { display: flex; align-items: center; color: var(--muted); font-size: 1.4rem; }
+.cc-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.cc-step {
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 14px; font-size: 0.82rem; text-align: center;
+}
+.cc-step strong { display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.cc-arrow2 { color: var(--purple); font-weight: 600; }
+
+/* ── rectangle attack grid ── */
+.rect { display: grid; grid-template-columns: repeat(2, auto); gap: 8px; justify-content: center; margin: 10px 0; align-items: center; }
+.rect .cell {
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 16px; text-align: center; font-style: italic; font-weight: 500;
+}
+.rect .cell.issued { border-color: var(--semantic-green); background: var(--semantic-green-bg); }
+.rect .cell.forged { border-color: var(--semantic-red); background: var(--semantic-red-bg); }
+.rect .op { text-align: center; font-size: 1.2rem; font-weight: 600; color: var(--muted); font-style: normal; }
+
+/* ── sequence diagram ── */
+.seq { display: grid; grid-template-columns: 1fr 44px 1fr; gap: 6px 10px; align-items: center; margin: 10px 0; }
+.seq .actor {
+  text-align: center; font-weight: 600; font-size: 0.85rem;
+  padding: 8px; border-radius: 8px; background: var(--purple-bg);
+}
+.seq .local {
+  background: #fff; border: 1px dashed var(--border); border-radius: 8px;
+  padding: 7px 12px; font-size: 0.84rem;
+}
+.seq .msg {
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 12px; font-size: 0.84rem;
+}
+.seq .chan { text-align: center; color: var(--purple); font-size: 1.3rem; font-weight: 600; }
+.seq.handshake { gap: 6px 10px; margin: 8px 0; }
+.seq.handshake .actor, .seq.handshake .msg, .seq.handshake .local { padding: 5px 10px; }
+
+/* ── lanes diagram ── */
+.lanes { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.lane-row {
+  display: grid; grid-template-columns: 76px 84px 1fr 1fr;
+  gap: 8px; align-items: center;
+}
+.lane-name { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+.lane-bit { text-align: center; }
+.branchbox {
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 12px; font-size: 0.82rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.branchbox .b-state {
+  font-size: 0.62rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; white-space: nowrap;
+}
+.branchbox.opened { border-color: var(--semantic-green); background: var(--semantic-green-bg); }
+.branchbox.opened .b-state { color: var(--semantic-green); }
+.branchbox.used { border-color: var(--purple); background: var(--purple-bg); }
+.branchbox.used .b-state { color: var(--purple); }
+.lane-ellipsis { text-align: center; color: var(--muted); }
+.lane-dots { padding: 0; }
+
+/* ── comparison tables ── */
+.compare { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; }
+.compare th {
+  text-align: left; font-weight: 600; font-size: 0.8rem;
+  padding: 10px 14px; border-bottom: 2px solid var(--border);
+}
+.compare td { padding: 9px 14px; border-bottom: 1px solid #f0edf3; font-size: 0.85rem; }
+.compare td:last-child, .compare th:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── nav ── */
+
+nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center;
+  gap: 16px; padding: 14px; z-index: 5;
+}
+nav button {
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  font-size: 0.8rem; color: var(--muted); padding: 4px 8px;
+}
+nav button:hover { color: var(--dark); }
+nav button:disabled { opacity: 0.2; cursor: default; }
+.slide-number { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dots { display: flex; gap: 6px; }
+.dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border); cursor: pointer; transition: background 0.2s;
+}
+.dot.on { background: var(--purple); }
+
+/* ── callout ── */
+.callout {
+  border-left: 3px solid var(--purple);
+  background: var(--purple-bg); border-radius: 0 8px 8px 0;
+  padding: 10px 16px; margin: 12px 0; font-size: 0.88rem;
+}
+.callout.warn { border-color: var(--semantic-amber); background: var(--semantic-amber-bg); }
+.callout.bad { border-color: var(--semantic-red); background: var(--semantic-red-bg); }
+.callout.good { border-color: var(--semantic-green); background: var(--semantic-green-bg); }
+
+/* ── animations ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.anim h2, .anim .subtitle, .anim .cols, .anim .cards, .anim .chart-wrap,
+.anim table, .anim .game, .anim .cc, .anim .rect, .anim .seq, .anim .lanes, .anim .callout,
+.anim .math-block, .anim .cc-flow, .anim ul {
+  opacity: 0; animation: fadeUp 0.5s ease both;
+}
+.anim .d1 { animation-delay: 0.1s; }
+.anim .d2 { animation-delay: 0.2s; }
+.anim .d3 { animation-delay: 0.3s; }
+
+/* title slide */
+.title-slide { text-align: left; }
+.title-meta { color: var(--muted); font-size: 0.85rem; margin-top: 18px; }
+
+.small { font-size: 0.8rem; color: var(--muted); }
+
+/* Reduce spacing in short windows while keeping text at its normal size. */
+@media (max-height: 650px) {
+  .slide-content { padding-block: 16px; }
+  .subtitle { margin-bottom: 12px; }
+  .math-block { margin-block: 8px; }
+  .callout { margin-block: 10px; }
+}
