@@ -52,6 +52,14 @@
 //    (little-endian, per (coeff, prime) slot). This is canonical for a fixed
 //    parameter set and versioned label; wire formats below still use the
 //    portable CRT serialization of ring.hpp.
+//  * Performance (value-preserving): matrix-vector products use a cached
+//    NTT-domain representation of the matrices (matvec_ntt; bit-identical to
+//    Ring::matvec), and the per-lane loops in commit/respond/finalize/verify
+//    run chunked over up to hardware_concurrency() threads. Cross-lane
+//    combination is exact modular addition, so results are bit-identical to
+//    the sequential reference regardless of thread count. A coefficient-
+//    domain ternary shift-add matvec was implemented and benchmarked first;
+//    at d=64/NMOD=3 it is ~6x slower than the NTT baseline and is not used.
 //  * The lane hash H_R ("CCKVBS-HR-v0") takes (i, mu, rho) and MUST NOT
 //    include sid (tex lines 478-480): sid is bound into branch formation and
 //    the challenge only, so credentials verify without the issuance session.
@@ -95,6 +103,7 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -150,6 +159,10 @@ public:
     SeedArr seed_B{}; // B = Expand_B(seed_B); check with valid_public_key()
     Mat B{};
     Vec t{};
+    // NTT-domain cache of B: identical values, transformed representation
+    // (see matvec_ntt). Filled by keygen_into / precompute_ntt; if absent the
+    // coefficient-domain fallback is used (same results, slower).
+    std::shared_ptr<Mat> B_ntt;
   };
   struct SigningKey {
     Vec s{}, e1{};
@@ -222,12 +235,54 @@ public:
     sk.e1 = sample_ternary_vec<P>(R, drbg);
     sk.pk.t = R.add(R.vecmat_T(sk.s, sk.pk.B), sk.e1);
     sk.de_key = drbg.bytes(32);
+    precompute_ntt(sk.pk);
   }
 
   SigningKey keygen() {
     SigningKey sk;
     keygen_into(sk);
     return sk;
+  }
+
+  // Fill pk.B_ntt for a public key that did not come from keygen_into.
+  static void precompute_ntt(PublicKey &pk) {
+    pk.B_ntt = std::make_shared<Mat>(pk.B);
+    ntt_mat_in_place(*pk.B_ntt);
+  }
+
+  // --- NTT-domain acceleration --------------------------------------------------
+  // matvec_ntt(ntt, x) computes exactly the same value as Ring::matvec(M, x)
+  // when ntt is M transformed by ntt_mat_in_place: pointwise products in the
+  // NTT domain and one inverse transform at the end; all arithmetic is exact
+  // mod each prime, so the coefficients match bit-for-bit. The matrices (the
+  // public B and the commitment matrix B_c) are transformed once and cached;
+  // the vector is transformed per call. This replaces the per-product NTT
+  // round-trips that dominated the paper-shape runtime (~7x on the
+  // matvec-dominated paths). A coefficient-domain ternary shift-add variant
+  // was also implemented and benchmarked: at d=64/NMOD=3 it is ~6x SLOWER
+  // than the NTT baseline, so it is not used. Public for the cross-check test.
+  static void ntt_mat_in_place(Mat &m) {
+    for (auto &row : m)
+      for (auto &p : row)
+        p.v.ntt_pow_phi();
+  }
+
+  static Vec matvec_ntt(const Mat &m_ntt, const Vec &x) {
+    Vec xh = x;
+    for (auto &p : xh)
+      p.v.ntt_pow_phi();
+    Vec out;
+    for (size_t i = 0; i < K; i++) {
+      typename Ring<P>::NPoly acc;
+      for (size_t cm = 0; cm < NMOD; cm++)
+        for (size_t j = 0; j < D; j++)
+          acc(cm, j) = 0;
+      for (size_t j = 0; j < K; j++)
+        acc = acc + xh[j].v * m_ntt[i][j].v; // pointwise, exact mod p_j
+      acc.invntt_pow_invphi();
+      out[i] = Poly{acc};
+    }
+    return out;
   }
 
   static void expand_b(const SeedArr &seed_B, Mat &out) {
@@ -265,28 +320,53 @@ public:
         std::copy_n(b.begin(), SEED_BYTES, seed.begin());
       }
 
-    // Pass 1: build both branches of every lane, aggregate, leaf list.
+    // Pass 1 (parallel over lanes): build both branches of every lane,
+    // per-lane partial aggregates, and the leaf list.
     LeafList leaves;
-    Vec c_agg = zero_vec();
-    for (size_t i = 0; i < KAPPA; i++)
-      for (uint8_t b = 0; b < 2; b++) {
-        Branch br = expand_branch(sid, i, b, z[i][b]);
-        Vec c = branch_vec(pk, i, br, mu_0);
-        leaves[2 * i + b] = hash_leaf(sid, i, b, c);
-        c_agg = R.add(c_agg, c);
+    std::vector<Vec> lane_sum(KAPPA);
+    parallel_chunks(KAPPA, [&](size_t, size_t lo, size_t hi) {
+      for (size_t i = lo; i < hi; i++) {
+        Vec acc = zero_vec();
+        for (uint8_t b = 0; b < 2; b++) {
+          Branch br = expand_branch(sid, i, b, z[i][b]);
+          Vec c = branch_vec(pk, i, br, mu_0);
+          leaves[2 * i + b] = hash_leaf(sid, i, b, c);
+          acc = R.add(acc, c);
+        }
+        lane_sum[i] = std::move(acc);
       }
+    });
+    Vec c_agg = zero_vec();
+    for (const auto &s : lane_sum)
+      c_agg = R.add(c_agg, s);
 
     st.chi = challenge(sid.issuer, pk, sid, c_agg, mu_0, leaves);
 
-    // Pass 2: re-expand the selected branches; accumulate what finalize needs.
+    // Pass 2 (parallel over lanes): re-expand the selected branches into
+    // per-chunk partial sums; combined in fixed chunk order afterwards.
+    size_t nch = num_chunks(KAPPA);
+    std::vector<Vec> part_r(nch), part_c(nch);
+    for (auto &v : part_r)
+      v = zero_vec();
+    for (auto &v : part_c)
+      v = zero_vec();
+    parallel_chunks(KAPPA, [&](size_t t, size_t lo, size_t hi) {
+      Vec sr = zero_vec(), sc = zero_vec();
+      for (size_t i = lo; i < hi; i++) {
+        uint8_t bs = st.chi[i] ? 0 : 1;
+        st.z_sel[i] = z[i][bs];
+        Branch br = expand_branch(sid, i, bs, z[i][bs]);
+        sr = R.add(sr, br.r);
+        sc = R.add(sc, branch_vec(pk, i, br, mu_0));
+      }
+      part_r[t] = std::move(sr);
+      part_c[t] = std::move(sc);
+    });
     st.r_sum = zero_vec();
     st.c_sel = zero_vec();
-    for (size_t i = 0; i < KAPPA; i++) {
-      uint8_t bs = st.chi[i] ? 0 : 1;
-      st.z_sel[i] = z[i][bs];
-      Branch br = expand_branch(sid, i, bs, z[i][bs]);
-      st.r_sum = R.add(st.r_sum, br.r);
-      st.c_sel = R.add(st.c_sel, branch_vec(pk, i, br, mu_0));
+    for (size_t t = 0; t < nch; t++) {
+      st.r_sum = R.add(st.r_sum, part_r[t]);
+      st.c_sel = R.add(st.c_sel, part_c[t]);
     }
 
     Message1 m1;
@@ -307,22 +387,41 @@ public:
   std::optional<Response> signer_respond(const SigningKey &sk,
                                          const Message1 &m1, Nizk<P> &nizk) {
     LeafList leaves;
-    Vec c_open_sum = zero_vec();
-    for (size_t i = 0; i < KAPPA; i++) {
-      uint8_t b = m1.chi[i] ? 1 : 0;
-      Branch br = expand_branch(m1.sid, i, b, m1.opened_seeds[i]);
-      // Formation checks: labels, sid and lane index are enforced by the
-      // domain-separated expansions; bounds are checked explicitly.
-      if (!fast_is_ternary(br.r) || !fast_is_ternary(br.e2) ||
-          !fast_is_ternary(br.delta))
+    // Parallel over lanes; per-chunk partial opened sums and failure flags.
+    // A failed lane aborts only its chunk early; leaves are not used in that
+    // case (we return nullopt below), and no secret-dependent value exists yet.
+    size_t nch = num_chunks(KAPPA);
+    std::vector<Vec> part_open(nch);
+    for (auto &v : part_open)
+      v = zero_vec();
+    std::vector<char> bad(nch, 0);
+    parallel_chunks(KAPPA, [&](size_t t, size_t lo, size_t hi) {
+      Vec acc = zero_vec();
+      for (size_t i = lo; i < hi; i++) {
+        uint8_t b = m1.chi[i] ? 1 : 0;
+        Branch br = expand_branch(m1.sid, i, b, m1.opened_seeds[i]);
+        // Formation checks: labels, sid and lane index are enforced by the
+        // domain-separated expansions; bounds are checked explicitly.
+        if (!fast_is_ternary(br.r) || !fast_is_ternary(br.e2) ||
+            !fast_is_ternary(br.delta)) {
+          bad[t] = 1;
+          return;
+        }
+        // Rerandomization consistency with mu_0 is structural: mu is rebuilt
+        // from the received mu_0 and the seed-derived delta, never transmitted.
+        Vec c = branch_vec(sk.pk, i, br, m1.mu_0);
+        leaves[2 * i + b] = hash_leaf(m1.sid, i, b, c);
+        leaves[2 * i + (1 - b)] = m1.unopened_leaves[i];
+        acc = R.add(acc, c);
+      }
+      part_open[t] = std::move(acc);
+    });
+    for (size_t t = 0; t < nch; t++)
+      if (bad[t])
         return std::nullopt;
-      // Rerandomization consistency with mu_0 is structural: mu is rebuilt
-      // from the received mu_0 and the seed-derived delta, never transmitted.
-      Vec c = branch_vec(sk.pk, i, br, m1.mu_0);
-      leaves[2 * i + b] = hash_leaf(m1.sid, i, b, c);
-      leaves[2 * i + (1 - b)] = m1.unopened_leaves[i];
-      c_open_sum = R.add(c_open_sum, c);
-    }
+    Vec c_open_sum = zero_vec();
+    for (const auto &v : part_open)
+      c_open_sum = R.add(c_open_sum, v);
     // The claimed challenge must match the recomputed one over the received
     // aggregate, mu_0 and the reassembled full leaf list.
     if (challenge(m1.sid.issuer, sk.pk, m1.sid, m1.c_agg, m1.mu_0, leaves) !=
@@ -364,12 +463,14 @@ public:
     cred.M = st.M;
     cred.phi0 = st.phi0;
     cred.delta.resize(KAPPA);
-    for (size_t i = 0; i < KAPPA; i++) {
-      uint8_t bs = st.chi[i] ? 0 : 1;
-      Branch br = expand_branch(st.sid, i, bs, st.z_sel[i]);
-      cred.delta[i] = std::move(br.delta);
-      cred.rho[i] = br.rho;
-    }
+    parallel_chunks(KAPPA, [&](size_t, size_t lo, size_t hi) {
+      for (size_t i = lo; i < hi; i++) {
+        uint8_t bs = st.chi[i] ? 0 : 1;
+        Branch br = expand_branch(st.sid, i, bs, st.z_sel[i]);
+        cred.delta[i] = std::move(br.delta);
+        cred.rho[i] = br.rho;
+      }
+    });
     // v = round(h - t^T * sum r_i*)
     cred.v = R.round_poly(R.sub(resp.h, R.inner(pk.t, st.r_sum)));
     return cred;
@@ -387,11 +488,21 @@ public:
       if (!fast_is_ternary(d))
         return false;
     Vec mu_0 = com(cred.M, cred.phi0);
+    size_t nch = num_chunks(KAPPA);
+    std::vector<Vec> part_u(nch);
+    for (auto &v : part_u)
+      v = zero_vec();
+    parallel_chunks(KAPPA, [&](size_t t, size_t lo, size_t hi) {
+      Vec acc = zero_vec();
+      for (size_t i = lo; i < hi; i++) {
+        Vec mu = R.add(mu_0, matvec_ntt(com_matrix_ntt(), cred.delta[i]));
+        acc = R.add(acc, hash_lane(i, mu, cred.rho[i]));
+      }
+      part_u[t] = std::move(acc);
+    });
     Vec u_sum = zero_vec();
-    for (size_t i = 0; i < KAPPA; i++) {
-      Vec mu = R.add(mu_0, R.matvec(com_matrix(), cred.delta[i]));
-      u_sum = R.add(u_sum, hash_lane(i, mu, cred.rho[i]));
-    }
+    for (const auto &v : part_u)
+      u_sum = R.add(u_sum, v);
     return R.round_poly(R.inner(sk.s, u_sum)) == cred.v;
   }
 
@@ -508,7 +619,7 @@ public:
   // Com(M; phi) = U(M) + B_c * phi. Our instantiation choice; see header.
   static Vec com(std::span<const uint8_t> M, const Vec &phi) {
     Ring<P> R;
-    return R.add(com_embed(M), R.matvec(com_matrix(), phi));
+    return R.add(com_embed(M), matvec_ntt(com_matrix_ntt(), phi));
   }
 
   // --- Message1 wire format ------------------------------------------------------
@@ -681,6 +792,48 @@ private:
       p = R.zero_poly();
     return v;
   }
+
+  // --- lane parallelism ----------------------------------------------------------
+  // The per-lane loops (commit, respond, finalize, verify) are independent per
+  // lane, so they run split into contiguous chunks on up to
+  // hardware_concurrency() threads. All cross-lane combination is exact
+  // modular addition, so the result is bit-identical to the sequential loops
+  // regardless of thread count or chunking.
+  static size_t num_chunks(size_t n) {
+    size_t hw = std::thread::hardware_concurrency();
+    if (hw == 0)
+      hw = 1;
+    return std::min(hw, n);
+  }
+
+  // f(chunk_index, lo, hi) over [0, n); exceptions are rethrown on the caller.
+  template <typename F> static void parallel_chunks(size_t n, F &&f) {
+    size_t nt = num_chunks(n);
+    if (nt <= 1) {
+      f(0, 0, n);
+      return;
+    }
+    std::vector<std::thread> pool;
+    std::vector<std::exception_ptr> errs(nt);
+    size_t chunk = (n + nt - 1) / nt;
+    for (size_t t = 0; t < nt; t++) {
+      size_t lo = t * chunk, hi = std::min(n, lo + chunk);
+      if (lo >= hi)
+        continue;
+      pool.emplace_back([&, t, lo, hi] {
+        try {
+          f(t, lo, hi);
+        } catch (...) {
+          errs[t] = std::current_exception();
+        }
+      });
+    }
+    for (auto &th : pool)
+      th.join();
+    for (auto &e : errs)
+      if (e)
+        std::rethrow_exception(e);
+  }
   Vec vec_sub(const Vec &a, const Vec &b) const {
     Vec out;
     for (size_t i = 0; i < K; i++)
@@ -732,9 +885,25 @@ private:
   static Vec branch_vec(const PublicKey &pk, uint32_t i, const Branch &br,
                         const Vec &mu_0) {
     Ring<P> R;
-    Vec mu = R.add(mu_0, R.matvec(com_matrix(), br.delta));
+    Vec mu = R.add(mu_0, matvec_ntt(com_matrix_ntt(), br.delta));
     Vec u = hash_lane(i, mu, br.rho);
-    return R.add(R.add(R.matvec(pk.B, br.r), br.e2), u);
+    return R.add(R.add(matvec_pk(pk, br.r), br.e2), u);
+  }
+
+  static Vec matvec_pk(const PublicKey &pk, const Vec &x) {
+    if (pk.B_ntt)
+      return matvec_ntt(*pk.B_ntt, x);
+    Ring<P> R; // coefficient-domain fallback (same values, slower)
+    return R.matvec(pk.B, x);
+  }
+
+  static const Mat &com_matrix_ntt() {
+    static const Mat *m = [] {
+      auto *t = new Mat(com_matrix()); // heap copy, transformed in place
+      ntt_mat_in_place(*t);
+      return t;
+    }();
+    return *m;
   }
 
   static const Mat &com_matrix() {

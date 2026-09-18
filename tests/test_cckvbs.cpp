@@ -260,6 +260,24 @@ TEST(cc_mock_refuses_false_statement) {
   CHECK(threw);
 }
 
+TEST(cc_ntt_matvec_matches_ring) {
+  // The NTT-accelerated matvec (and the public-key cache built from it) must
+  // be bit-identical to Ring::matvec, for ternary and uniform vectors alike.
+  Ring<P> ring;
+  auto drbg = Drbg::from_u64(0xA77);
+  Sch::Mat m = sample_uniform_mat<P>(ring, drbg);
+  Sch::Mat m_ntt = m;
+  Sch::ntt_mat_in_place(m_ntt);
+  for (int trial = 0; trial < 4; trial++) {
+    Sch::Vec x = (trial % 2 == 0) ? sample_ternary_vec<P>(ring, drbg)
+                                  : sample_uniform_vec<P>(ring, drbg);
+    auto ref = ring.matvec(m, x);
+    auto got = Sch::matvec_ntt(m_ntt, x);
+    for (size_t i = 0; i < P::K; i++)
+      CHECK(ring.equal(ref[i], got[i]));
+  }
+}
+
 TEST(cc_paper_shape_smoke) {
   // One full run at the paper's shape (d=64, n=93, p=4, log2(Q)=186). The
   // paper's kappa=512 is too slow for ctest here; kappa=64 exercises the same
