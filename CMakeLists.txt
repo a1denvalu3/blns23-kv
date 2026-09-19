@@ -19,6 +19,7 @@ target_include_directories(nfl INTERFACE third_party/nfl-include)
 
 add_library(blnskv
   src/drbg.cpp
+  src/sha256.cpp
   third_party/fips202/fips202.c
 )
 target_include_directories(blnskv PUBLIC src third_party/fips202)

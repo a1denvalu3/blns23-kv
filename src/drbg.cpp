@@ -1,5 +1,7 @@
 #include "drbg.hpp"
 
+#include "sha256.hpp"
+
 #include <cstring>
 #include <stdexcept>
 #include <sys/random.h>
@@ -94,6 +96,82 @@ std::vector<uint8_t> xof(std::string_view domain,
                          size_t outlen) {
   std::vector<uint8_t> out(outlen);
   xof(domain, parts, out.data(), outlen);
+  return out;
+}
+
+// --- SHA-256 counter-mode DRBG / XOF (see drbg.hpp) ---------------------------
+
+Sha256Drbg::Sha256Drbg(const Seed &seed) : seed_(seed) {}
+
+void Sha256Drbg::fill(uint8_t *out, size_t n) {
+  // Counter mode: SHA256(seed || u64le(counter)) per block, mirroring Drbg.
+  std::vector<uint8_t> in(seed_.size() + 8);
+  std::memcpy(in.data(), seed_.data(), seed_.size());
+  size_t off = 0;
+  while (off < n) {
+    uint64_t ctr_le = counter_++;
+    std::memcpy(in.data() + seed_.size(), &ctr_le, 8);
+    uint8_t block[32];
+    sha256(in.data(), in.size(), block);
+    size_t take = std::min(n - off, sizeof(block));
+    std::memcpy(out + off, block, take);
+    off += take;
+  }
+}
+
+std::vector<uint8_t> Sha256Drbg::bytes(size_t n) {
+  std::vector<uint8_t> out(n);
+  fill(out.data(), n);
+  return out;
+}
+
+uint64_t Sha256Drbg::next_below(uint64_t bound) {
+  if (bound == 0)
+    throw std::invalid_argument("next_below(0)");
+  if (bound <= (1u << 8)) {
+    for (;;) {
+      uint8_t b;
+      fill(&b, 1);
+      if (b < static_cast<uint8_t>(bound * (256 / bound)))
+        return b % bound;
+    }
+  }
+  for (;;) {
+    uint64_t v;
+    fill(reinterpret_cast<uint8_t *>(&v), 8);
+    if (v < UINT64_MAX - (UINT64_MAX % bound))
+      return v % bound;
+  }
+}
+
+void xof_sha256(std::string_view domain,
+                const std::vector<std::vector<uint8_t>> &parts, uint8_t *out,
+                size_t outlen) {
+  std::vector<uint8_t> prefix(domain.begin(), domain.end());
+  for (const auto &p : parts) {
+    prefix.push_back(0x00);
+    prefix.insert(prefix.end(), p.begin(), p.end());
+  }
+  size_t base = prefix.size();
+  prefix.resize(base + 8);
+  size_t off = 0;
+  uint64_t ctr = 0;
+  while (off < outlen) {
+    uint64_t ctr_le = ctr++;
+    std::memcpy(prefix.data() + base, &ctr_le, 8);
+    uint8_t block[32];
+    sha256(prefix.data(), prefix.size(), block);
+    size_t take = std::min(outlen - off, sizeof(block));
+    std::memcpy(out + off, block, take);
+    off += take;
+  }
+}
+
+std::vector<uint8_t> xof_sha256(std::string_view domain,
+                                const std::vector<std::vector<uint8_t>> &parts,
+                                size_t outlen) {
+  std::vector<uint8_t> out(outlen);
+  xof_sha256(domain, parts, out.data(), outlen);
   return out;
 }
 

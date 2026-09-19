@@ -16,6 +16,10 @@ add_test(NAME cckvbs COMMAND test_cckvbs)
 # The paper-shape smoke run (kappa=64) takes tens of seconds of mock tooling.
 set_tests_properties(cckvbs PROPERTIES TIMEOUT 900)
 
+add_executable(test_sha256 test_sha256.cpp)
+target_link_libraries(test_sha256 PRIVATE blnskv)
+add_test(NAME sha256 COMMAND test_sha256)
+
 # LaBRADOR-backed pi2 adapter. One real prove (minutes under SDE) plus verify
 # replays; registered through the SDE launcher like labrador-smoke (SDE64 is
 # detected in the top-level CMakeLists). Skipped entirely when
