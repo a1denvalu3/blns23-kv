@@ -63,14 +63,16 @@ TEST(sha256_drbg_determinism) {
   auto sc = c.bytes(100);
   CHECK(sa != sc);
 
-  // counter mode: each fill() call starts a fresh 32-byte block (the unused
-  // tail of a block is discarded, exactly as in Drbg)
+  // contiguous consumption: split draws equal the one-shot squeeze, including
+  // across 32-byte block boundaries
   Sha256Drbg d(seed), e(seed);
-  auto d1 = d.bytes(13); // block 0, first 13 bytes
-  auto d2 = d.bytes(19); // block 1, first 19 bytes
+  auto d1 = d.bytes(13); // stream bytes [0, 13)
+  auto d2 = d.bytes(19); // stream bytes [13, 32): crosses into block 1
+  auto d3 = d.bytes(68); // stream bytes [32, 100)
   auto whole = e.bytes(100);
   CHECK(std::memcmp(whole.data(), d1.data(), 13) == 0);
-  CHECK(std::memcmp(whole.data() + 32, d2.data(), 19) == 0);
+  CHECK(std::memcmp(whole.data() + 13, d2.data(), 19) == 0);
+  CHECK(std::memcmp(whole.data() + 32, d3.data(), 68) == 0);
 }
 
 TEST(sha256_drbg_next_below) {

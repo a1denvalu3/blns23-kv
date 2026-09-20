@@ -101,20 +101,25 @@ std::vector<uint8_t> xof(std::string_view domain,
 
 // --- SHA-256 counter-mode DRBG / XOF (see drbg.hpp) ---------------------------
 
-Sha256Drbg::Sha256Drbg(const Seed &seed) : seed_(seed) {}
+Sha256Drbg::Sha256Drbg(const Seed &seed)
+    : in_(seed.begin(), seed.end()) {
+  in_.resize(in_.size() + 8, 0); // counter slot, written per squeeze
+}
 
 void Sha256Drbg::fill(uint8_t *out, size_t n) {
-  // Counter mode: SHA256(seed || u64le(counter)) per block, mirroring Drbg.
-  std::vector<uint8_t> in(seed_.size() + 8);
-  std::memcpy(in.data(), seed_.data(), seed_.size());
+  // Contiguous counter mode: drain the buffered block first, then squeeze
+  // SHA256(seed || u64le(counter)) blocks, keeping the tail for next time.
   size_t off = 0;
   while (off < n) {
-    uint64_t ctr_le = counter_++;
-    std::memcpy(in.data() + seed_.size(), &ctr_le, 8);
-    uint8_t block[32];
-    sha256(in.data(), in.size(), block);
-    size_t take = std::min(n - off, sizeof(block));
-    std::memcpy(out + off, block, take);
+    if (pos_ == sizeof(block_)) {
+      uint64_t ctr_le = counter_++;
+      std::memcpy(in_.data() + in_.size() - 8, &ctr_le, 8);
+      sha256(in_.data(), in_.size(), block_);
+      pos_ = 0;
+    }
+    size_t take = std::min(n - off, sizeof(block_) - pos_);
+    std::memcpy(out + off, block_ + pos_, take);
+    pos_ += take;
     off += take;
   }
 }

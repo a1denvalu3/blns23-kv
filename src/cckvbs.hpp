@@ -60,29 +60,36 @@
 //    the sequential reference regardless of thread count. A coefficient-
 //    domain ternary shift-add matvec was implemented and benchmarked first;
 //    at d=64/NMOD=3 it is ~6x slower than the NTT baseline and is not used.
-//  * The lane hash H_R ("CCKVBS-HR-v1") takes (i, mu, rho) and MUST NOT
+//  * The lane hash H_R ("CCKVBS-HR-v2") takes (i, mu, rho) and MUST NOT
 //    include sid (tex lines 478-480): sid is bound into branch formation and
 //    the challenge only, so credentials verify without the issuance session.
 //
-// Domain labels (versioned, SHA-256 counter mode since -v1): CCKVBS-G-v1
-// (branch expansion), CCKVBS-RHO-v1, CCKVBS-HR-v1 (lane hash),
-// CCKVBS-LEAF-v1, CCKVBS-CHAL-v1, CCKVBS-DE-v1 (deterministic response
-// error), CCKVBS-COM-v1 (message commitment: matrix seed + embedding),
-// CCKVBS-EB-v1 (Expand_B), CCKVBS-FINAL-v1 (application payload),
-// CCKVBS-NULL-v1 (scoped nullifier).
+// Domain labels (versioned; SHA-256 counter mode, contiguous stream since
+// -v2): CCKVBS-G-v2
+// (branch expansion), CCKVBS-RHO-v2, CCKVBS-HR-v2 (lane hash),
+// CCKVBS-LEAF-v2, CCKVBS-CHAL-v2, CCKVBS-DE-v2 (deterministic response
+// error), CCKVBS-COM-v2 (message commitment: matrix seed + embedding),
+// CCKVBS-EB-v2 (Expand_B), CCKVBS-FINAL-v2 (application payload),
+// CCKVBS-NULL-v2 (scoped nullifier).
 //
-// REVISION v0 -> v1 (protocol revision, not a drop-in): the -v0 labels used
-// SHAKE256 (Drbg/xof()); -v1 uses SHA-256 counter mode (Sha256Drbg /
-// xof_sha256(), drbg.hpp) everywhere in this module. Rationale: after the
-// NTT matvec optimization the remaining hot path is sampling-bound -- many
-// tiny XOF draws (one per coefficient) -- and one SHA-256 per 32-byte block
-// is much cheaper than one Keccak-f per 136-byte block. Measured at
-// CutAndChooseParams (i7-1365U, SHA-NI): branch expansion 9.3 -> 4.9 ms,
-// lane hash 9.4 -> 4.8 ms (~1.9x on the sampling share). Every derived value
-// (rho, leaves, challenge, lane vectors, response error) changes, so -v0 and
-// -v1 instances are incompatible by construction. Wire formats (sizes,
-// layouts) are unchanged. The base scheme (blnskv.hpp, hashring.hpp,
-// poseidon2) stays on SHAKE256/Poseidon2 exactly as before.
+// REVISIONS (protocol revisions, not drop-ins):
+//  v0 -> v1: the -v0 labels used SHAKE256 (Drbg/xof()); -v1 switched this
+//    module to SHA-256 counter mode (Sha256Drbg / xof_sha256(), drbg.hpp).
+//    Rationale: after the NTT matvec optimization the remaining hot path is
+//    sampling-bound -- many tiny XOF draws (one per coefficient) -- and one
+//    SHA-256 per 32-byte block is much cheaper than one Keccak-f per
+//    136-byte block.
+//  v1 -> v2: same XOF primitive and labels' meaning, but Sha256Drbg now
+//    consumes the counter-mode stream CONTIGUOUSLY (buffered 32-byte block)
+//    instead of starting a fresh block per fill() call and discarding the
+//    tail. Every derived value for a given sampling call sequence changes
+//    again, so -v1 and -v2 instances are incompatible by construction. This
+//    removes the last per-draw hashing: a 32-byte block now covers 32
+//    ternary draws (or 4 uniform-coefficient draws) instead of one.
+// Every label bump changes rho, leaves, challenge, lane vectors and the
+// response error. Wire formats (sizes, layouts) are unchanged across all
+// revisions. The base scheme (blnskv.hpp, hashring.hpp, poseidon2) stays on
+// SHAKE256/Poseidon2 exactly as before.
 //
 // OPERATIONAL CONVENTIONS (caller obligations, load-bearing per the paper):
 //  (SID) Session identifiers must never repeat within a key epoch --
@@ -301,7 +308,7 @@ public:
 
   static void expand_b(const SeedArr &seed_B, Mat &out) {
     Ring<P> R;
-    Sha256Drbg d(xof_sha256("CCKVBS-EB-v1", {to_vec(seed_B)}, 64));
+    Sha256Drbg d(xof_sha256("CCKVBS-EB-v2", {to_vec(seed_B)}, 64));
     sample_uniform_mat_into<P>(R, d, out);
   }
 
@@ -532,7 +539,7 @@ public:
       buf.insert(buf.end(), rho.begin(), rho.end());
     for (const auto &d : cred.delta)
       append_packed(buf, pack_ternary_vec(d));
-    auto out = xof_sha256("CCKVBS-FINAL-v1", {to_vec(issuer), buf}, 32);
+    auto out = xof_sha256("CCKVBS-FINAL-v2", {to_vec(issuer), buf}, 32);
     IssuerArr res;
     std::copy_n(out.begin(), 32, res.begin());
     return res;
@@ -546,7 +553,7 @@ public:
     std::vector<uint8_t> buf;
     append_len_prefixed(buf, scope);
     append_len_prefixed(buf, cred.M);
-    auto out = xof_sha256("CCKVBS-NULL-v1", {buf}, 32);
+    auto out = xof_sha256("CCKVBS-NULL-v2", {buf}, 32);
     IssuerArr res;
     std::copy_n(out.begin(), 32, res.begin());
     return res;
@@ -556,7 +563,7 @@ public:
   static Branch expand_branch(const SessionId &sid, uint32_t i, uint8_t b,
                               const SeedArr &z) {
     Ring<P> R;
-    Sha256Drbg d(xof_sha256("CCKVBS-G-v1",
+    Sha256Drbg d(xof_sha256("CCKVBS-G-v2",
                {to_vec(sid.to_bytes()), u32_bytes(i), std::vector<uint8_t>{b},
                 to_vec(z)},
                64));
@@ -570,7 +577,7 @@ public:
 
   static RhoArr hash_rho_cc(const SessionId &sid, uint32_t i, uint8_t b,
                             const Vec &r, const Vec &e2) {
-    auto out = xof_sha256("CCKVBS-RHO-v1",
+    auto out = xof_sha256("CCKVBS-RHO-v2",
                    {to_vec(sid.to_bytes()), u32_bytes(i),
                     std::vector<uint8_t>{b}, fast_bytes(r), fast_bytes(e2)},
                    RHO_BYTES);
@@ -582,14 +589,14 @@ public:
   // H_R: the credential lane hash. MUST NOT include sid (see header).
   static Vec hash_lane(uint32_t i, const Vec &mu, const RhoArr &rho) {
     Ring<P> R;
-    Sha256Drbg d(xof_sha256("CCKVBS-HR-v1",
+    Sha256Drbg d(xof_sha256("CCKVBS-HR-v2",
                {u32_bytes(i), fast_bytes(mu), to_vec(rho)}, 64));
     return sample_uniform_vec<P>(R, d);
   }
 
   static LeafArr hash_leaf(const SessionId &sid, uint32_t i, uint8_t b,
                            const Vec &c) {
-    auto out = xof_sha256("CCKVBS-LEAF-v1",
+    auto out = xof_sha256("CCKVBS-LEAF-v2",
                    {to_vec(sid.to_bytes()), u32_bytes(i),
                     std::vector<uint8_t>{b}, fast_bytes(c)},
                    LEAF_BYTES);
@@ -609,7 +616,7 @@ public:
     for (size_t j = 0; j < 2 * KAPPA; j++)
       std::copy_n(leaves[j].begin(), LEAF_BYTES,
                   leaf_bytes.begin() + j * LEAF_BYTES);
-    auto bits = xof_sha256("CCKVBS-CHAL-v1",
+    auto bits = xof_sha256("CCKVBS-CHAL-v2",
                     {to_vec(issuer), to_vec(pk.seed_B), fast_bytes(pk.t),
                      to_vec(sid.to_bytes()), fast_bytes(c_agg),
                      fast_bytes(mu_0), leaf_bytes},
@@ -625,7 +632,7 @@ public:
   static Poly response_error(const Drbg::Seed &key, const SessionId &sid,
                              const Vec &c_agg) {
     Ring<P> R;
-    Sha256Drbg d(xof_sha256("CCKVBS-DE-v1",
+    Sha256Drbg d(xof_sha256("CCKVBS-DE-v2",
                {key, to_vec(sid.to_bytes()), fast_bytes(c_agg)}, 64));
     return sample_ternary<P>(R, d);
   }
@@ -925,7 +932,7 @@ private:
     // to rely on NRVO eliding stack temporaries.
     static const Mat *Bc = [] {
       Ring<P> R;
-      Sha256Drbg d(xof_sha256("CCKVBS-COM-v1", {std::vector<uint8_t>{'m'}}, 64));
+      Sha256Drbg d(xof_sha256("CCKVBS-COM-v2", {std::vector<uint8_t>{'m'}}, 64));
       auto *m = new Mat();
       sample_uniform_mat_into<P>(R, d, *m);
       return m;
@@ -934,7 +941,7 @@ private:
   }
   static Vec com_embed(std::span<const uint8_t> M) {
     Ring<P> R;
-    Sha256Drbg d(xof_sha256("CCKVBS-COM-v1",
+    Sha256Drbg d(xof_sha256("CCKVBS-COM-v2",
                {std::vector<uint8_t>{'e'},
                 std::vector<uint8_t>(M.begin(), M.end())},
                64));
